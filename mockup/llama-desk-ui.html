@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama-desk — control panel (mockup)</title>
+<style>
+/* ---------- design tokens ---------- */
+:root {
+  --r: 12px;
+  --r-sm: 8px;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --accent: #f59e0b;
+  --accent-strong: #d97706;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --green: #34d399;   --green-soft: rgba(52, 211, 153, 0.14);
+  --red: #f87171;     --red-soft: rgba(248, 113, 113, 0.14);
+  --blue: #60a5fa;    --blue-soft: rgba(96, 165, 250, 0.14);
+  --purple: #a78bfa;
+  --amber: #fbbf24;
+}
+html[data-theme="dark"] {
+  --bg: #0b0e13;
+  --bg-glow: radial-gradient(900px 480px at 85% -10%, rgba(245,158,11,0.07), transparent 60%),
+             radial-gradient(700px 420px at -10% 110%, rgba(96,165,250,0.05), transparent 60%);
+  --panel: #141925;
+  --panel-2: #1a2130;
+  --panel-3: #0f131b;
+  --line: #242d3f;
+  --line-soft: #1d2534;
+  --text: #e8ecf4;
+  --muted: #9aa6bd;
+  --faint: #7c88a3;
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
+  --console-bg: #0a0d12;
+}
+html[data-theme="light"] {
+  --bg: #f4f5f8;
+  --bg-glow: radial-gradient(900px 480px at 85% -10%, rgba(245,158,11,0.10), transparent 60%);
+  --panel: #ffffff;
+  --panel-2: #f0f2f7;
+  --panel-3: #fafbfc;
+  --line: #e2e6ee;
+  --line-soft: #eceff5;
+  --text: #1b2230;
+  --muted: #55617a;
+  --faint: #66738d;
+  --shadow: 0 8px 24px rgba(23,32,55,0.08);
+  --console-bg: #10151f;
+  --accent: #d97706;
+  --accent-strong: #b45309;
+  --accent-soft: rgba(217,119,6,0.12);
+  --green: #059669;    --green-soft: rgba(5,150,105,0.12);
+  --red: #dc2626;      --red-soft: rgba(220,38,38,0.10);
+  --blue: #2563eb;     --blue-soft: rgba(37,99,235,0.10);
+  --purple: #7c3aed;
+  --amber: #d97706;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  background-image: var(--bg-glow);
+  background-attachment: fixed;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+::selection { background: var(--accent-soft); }
+
+/* ---------- layout ---------- */
+.app { display: grid; grid-template-columns: 64px 1fr; height: 100vh; height: 100dvh; }
+.rail {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 18px 0 14px; border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  backdrop-filter: blur(8px);
+}
+.nav-btn {
+  width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center;
+  color: var(--faint); position: relative; transition: background .15s, color .15s;
+}
+.nav-btn:hover { color: var(--text); background: var(--panel-2); }
+.nav-btn.active { color: var(--accent); background: var(--accent-soft); }
+.nav-btn.active::before {
+  content: ""; position: absolute; left: -10px; top: 10px; bottom: 10px;
+  width: 3px; border-radius: 3px; background: var(--accent);
+}
+.rail .spacer { flex: 1; }
+.rail-status { width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-bottom: 6px; }
+.rail-foot { font-size: 10px; color: var(--faint); writing-mode: vertical-rl; letter-spacing: 1px; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 24px; height: 60px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 45%, transparent);
+  backdrop-filter: blur(8px);
+}
+.topbar h1 { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+.topbar .sub { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.topbar .grow { flex: 1; }
+
+.content { flex: 1; overflow-y: auto; padding: 22px 24px 60px; }
+.view { display: none; max-width: 1240px; margin: 0 auto; }
+.view.active { display: block; animation: fadein .18s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+.grid { display: grid; gap: 14px; }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g23 { grid-template-columns: 2fr 1fr; }
+.g32 { grid-template-columns: 1fr 2fr; }
+@media (max-width: 1100px) { .g4 { grid-template-columns: repeat(2,1fr); } .g23,.g32,.g3 { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .topbar .kbd { display: none; } }
+@media (max-width: 720px) {
+  body { overflow-x: hidden; }
+  .app { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) auto; }
+  .main { grid-row: 1; min-height: 0; }
+  /* side rail becomes a bottom tab bar */
+  .rail {
+    grid-row: 2; flex-direction: row; justify-content: space-around; align-items: center;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    border-right: none; border-top: 1px solid var(--line);
+  }
+  .nav-btn.active::before { left: 12px; right: 12px; top: auto; bottom: -6px; width: auto; height: 3px; }
+  .rail .spacer, .rail-foot, .rail-status { display: none; }
+  .content { padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
+  .topbar { height: auto; min-height: 56px; padding: 10px 14px; flex-wrap: wrap; row-gap: 8px; }
+  .topbar h1 { font-size: 15px; }
+  .topbar .sub { display: none; }
+  .btn-label { display: none; }
+  #btn-launch { padding: 7px 10px; }
+  .stat .value { font-size: 22px; }
+  .stat .spark { width: 84px; }
+  .card { padding: 14px; }
+  .card h2 { flex-wrap: wrap; row-gap: 6px; }
+  .row-item { flex-wrap: wrap; }
+  .row-item .right { text-align: left; }
+  .sr-right { width: auto !important; }
+  .console.tall { height: 240px; }
+  .console { height: 190px; }
+  .donut-wrap { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .foot-note { gap: 6px 14px; }
+  .toasts { bottom: calc(74px + env(safe-area-inset-bottom)); left: 16px; right: 16px; transform: none; }
+}
+@media (max-width: 460px) {
+  .g4 { grid-template-columns: 1fr; }
+  .f2 { grid-template-columns: 1fr; }
+}
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 16px 18px; box-shadow: var(--shadow);
+}
+.card h2 {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card h2 .right { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--muted); font-weight: 500; }
+.stack { display: grid; gap: 14px; align-content: start; }
+
+/* stat tiles */
+.stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.stat .value { font-size: 26px; font-weight: 680; letter-spacing: -0.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.stat .value small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+.stat .foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.stat .delta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.delta.up { color: var(--green); }
+.stat .spark { width: 110px; height: 30px; flex: none; }
+
+/* ---------- pills & badges ---------- */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+  border-radius: 999px; font-size: 12px; font-weight: 550; white-space: nowrap;
+}
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.running, .pill.completed, .pill.ok { background: var(--green-soft); color: var(--green); }
+.pill.running .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.pill.stopping, .pill.interrupted, .pill.warn { background: var(--accent-soft); color: var(--accent); }
+.pill.failed, .pill.error { background: var(--red-soft); color: var(--red); }
+.pill.stopped, .pill.queued, .pill.idle { background: var(--panel-2); color: var(--muted); }
+.pill.downloading { background: var(--blue-soft); color: var(--blue); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.kbd {
+  font-family: var(--mono); font-size: 12px; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; color: var(--muted);
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px;
+  border-radius: var(--r-sm); font-size: 13px; font-weight: 550;
+  border: 1px solid var(--line); background: var(--panel-2);
+  transition: background .15s, border-color .15s, transform .05s; white-space: nowrap;
+}
+.btn:hover { background: var(--panel-3); border-color: var(--line-soft); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: transparent; color: #1d1305; }
+.btn.primary:hover { background: var(--accent-strong); }
+.btn.danger { color: var(--red); }
+.btn.danger:hover { background: var(--red-soft); border-color: var(--red); }
+.btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 7px; }
+.btn.icon { padding: 7px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn svg { flex: none; }
+
+/* ---------- charts ---------- */
+.chart { width: 100%; display: block; }
+.chart-area path.line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.chart-area path.gridline { stroke: var(--line-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart .bar { rx: 1.5; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.chips { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+.chip { padding: 4px 12px; border-radius: 7px; font-size: 12px; font-weight: 550; color: var(--muted); transition: all .15s; }
+.chip.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+
+/* meters / bars */
+.meter { height: 6px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width .6s ease; }
+.meter.green > i { background: var(--green); }
+.meter.blue > i { background: var(--blue); }
+.meter.red > i { background: var(--red); }
+.hw-row { display: grid; grid-template-columns: 64px 1fr 86px; align-items: center; gap: 12px; padding: 7px 0; }
+.hw-row .k { font-size: 12px; color: var(--muted); font-weight: 550; }
+.hw-row .v { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.hw-row .meter { height: 5px; }
+
+/* ---------- lists / tables ---------- */
+.list { display: grid; gap: 10px; }
+.row-item {
+  display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  transition: border-color .15s;
+}
+.row-item:hover { border-color: var(--line-soft); }
+.row-item .grow { flex: 1; min-width: 0; }
+.row-item .title { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 9px; }
+.row-item .meta { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+.row-item .right { text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .12s; }
+tbody tr:hover { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+td .fname { font-weight: 600; font-size: 13px; }
+td .fpath { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-top: 1px; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+tr:hover .row-actions, .row-actions:focus-within { opacity: 1; }
+.row-actions .btn { opacity: .9; }
+.badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+}
+.badge.live { background: var(--green-soft); color: var(--green); border-color: transparent; }
+.badge.cfg { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* progress (downloads) */
+.dl-progress { margin-top: 8px; }
+.dl-progress .bar { height: 7px; border-radius: 5px; background: var(--panel-2); overflow: hidden; position: relative; }
+.dl-progress .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: linear-gradient(90deg, var(--blue), #93c5fd); transition: width .8s linear; }
+.dl-progress .bar.done > i { background: var(--green); }
+.dl-progress .bar.failed > i { background: var(--red); }
+.dl-progress .labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
+.err-line { margin-top: 6px; font-size: 12px; color: var(--red); font-family: var(--mono); }
+
+/* ---------- servers ---------- */
+.server-row { cursor: pointer; }
+.server-row .chev { color: var(--faint); transition: transform .18s ease; }
+.server-row:hover .chev { transform: translateX(3px); }
+.sr-right { width: 90px; flex: none; }
+.back-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.back-row .grow { flex: 1; }
+.err-banner {
+  display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px;
+  background: var(--red-soft); border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+  border-radius: var(--r); padding: 12px 14px; font-size: 13px; color: var(--red);
+}
+.err-banner svg { flex: none; margin-top: 2px; }
+.console.tall { height: 440px; }
+.kv { display: grid; grid-template-columns: 108px 1fr; gap: 5px 12px; font-size: 12.5px; }
+.kv .k { color: var(--muted); }
+.kv .v { font-variant-numeric: tabular-nums; word-break: break-all; }
+.argbox {
+  font-family: var(--mono); font-size: 12px; line-height: 1.7; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 12px; margin-top: 4px;
+  color: var(--text); overflow-x: auto; white-space: pre;
+}
+.console {
+  background: var(--console-bg); color: #c8d3e8; font-family: var(--mono); font-size: 12px;
+  line-height: 1.65; border-radius: var(--r-sm); padding: 12px 14px; height: 232px;
+  overflow-y: auto; white-space: pre-wrap; word-break: break-all; border: 1px solid #1c2431;
+}
+.console .i { color: #7dd3a8; }
+.console .w { color: #fbbf24; }
+.console .e { color: #f87171; }
+.console .dim { color: #5b667e; }
+
+/* ---------- forms ---------- */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.field label .opt { font-weight: 400; color: var(--faint); }
+.field input[type=text], .field input[type=number], .field select, .field textarea {
+  width: 100%; background: var(--panel-3); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 8px 11px; font-size: 13px; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.field textarea { font-family: var(--mono); font-size: 12px; line-height: 1.6; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field .hint { font-size: 12px; color: var(--faint); margin-top: 5px; }
+.f2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.search {
+  display: flex; align-items: center; gap: 8px; background: var(--panel-3);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 7px 12px; min-width: 240px;
+}
+.search input { border: none; background: none; outline: none; width: 100%; font-size: 13px; color: var(--text); }
+.search svg { color: var(--faint); flex: none; }
+
+/* ---------- drawer ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(4,7,12,0.55); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; backdrop-filter: blur(2px); }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 94vw); z-index: 50;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -18px 0 50px rgba(0,0,0,.4);
+  transform: translateX(103%); transition: transform .25s cubic-bezier(.2,.8,.25,1);
+  display: flex; flex-direction: column;
+}
+.app.drawer-open .scrim { opacity: 1; pointer-events: auto; }
+.app.drawer-open .drawer { transform: none; }
+.drawer header { display: flex; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.drawer header h2 { font-size: 15px; font-weight: 650; }
+.drawer header .x { margin-left: auto; color: var(--muted); }
+.drawer .body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.drawer footer { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 22px; border-top: 1px solid var(--line); }
+.note {
+  display: flex; gap: 9px; font-size: 12px; color: var(--muted); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; margin-bottom: 18px;
+}
+.note svg { flex: none; margin-top: 1px; color: var(--accent); }
+
+/* ---------- toast ---------- */
+.toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 60; }
+.toast {
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+  border-radius: 10px; padding: 10px 16px; font-size: 13px; display: flex; gap: 9px; align-items: center;
+  animation: toastin .25s cubic-bezier(.2,.8,.25,1);
+}
+@keyframes toastin { from { opacity: 0; transform: translateY(10px); } }
+.toast .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.toast.ok .dot { background: var(--green); }
+
+/* footer */
+.foot-note { max-width: 1240px; margin: 26px auto 0; color: var(--faint); font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); }
+
+/* donut */
+.donut-wrap { display: flex; align-items: center; gap: 20px; }
+.donut-center { font-size: 21px; font-weight: 680; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.donut-center small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.seg-legend { display: grid; gap: 8px; font-size: 12.5px; flex: 1; }
+.seg-legend .l { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.seg-legend .l .num { margin-left: auto; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ============ icon rail ============ -->
+  <aside class="rail">
+    <button class="nav-btn active" data-nav="dashboard" title="Dashboard">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>
+    </button>
+    <button class="nav-btn" data-nav="servers" title="Servers">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+    </button>
+    <button class="nav-btn" data-nav="downloads" title="Downloads">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <button class="nav-btn" data-nav="files" title="Model files">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+    </button>
+    <div class="spacer"></div>
+    <div class="rail-status" title="llama-desk healthy"></div>
+    <div class="rail-foot">v0.1</div>
+  </aside>
+
+  <div class="main">
+    <!-- ============ top bar ============ -->
+    <header class="topbar">
+      <div>
+        <h1 id="view-title">Dashboard</h1>
+        <div class="sub" id="view-sub">Overview of active servers, served tokens and hardware</div>
+      </div>
+      <div class="grow"></div>
+      <span class="kbd" title="Gateway entry point">/v1 · 2 models live</span>
+      <button class="btn primary" id="btn-launch" title="Launch server">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 21 12 6 21"/></svg>
+        <span class="btn-label">Launch server</span>
+      </button>
+      <button class="btn icon" id="btn-theme" title="Toggle dark / light">
+        <svg id="ico-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="ico-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </header>
+
+    <main class="content">
+
+      <!-- =================== DASHBOARD =================== -->
+      <section class="view active" id="view-dashboard">
+        <div class="grid g4" style="margin-bottom:14px">
+          <div class="card stat">
+            <div class="label">Active servers</div>
+            <div class="value" id="st-servers">2<small>/ 4 managed</small></div>
+            <div class="foot"><span class="delta up" id="st-servers-delta">● 2 healthy · 1 failed</span></div>
+          </div>
+          <div class="card stat">
+            <div class="label">Aliases on /v1</div>
+            <div class="value">2</div>
+            <div class="foot"><span class="delta">qwen3-14b · embeddings</span></div>
+          </div>
+          <div class="card stat">
+            <div class="label">Tokens served today</div>
+            <div class="value num" id="st-tokens">1.28 M</div>
+            <div class="foot">
+              <span class="delta" id="st-tokens-rate">≈ 142 tok/s now</span>
+              <span class="spark" id="spark-tokens"></span>
+            </div>
+          </div>
+          <div class="card stat">
+            <div class="label">Requests</div>
+            <div class="value num"><span id="st-rpm">24</span><small>/min</small></div>
+            <div class="foot">
+              <span class="delta">p50 410 ms · p95 2.1 s</span>
+              <span class="spark" id="spark-req"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid g23" style="margin-bottom:14px">
+          <div class="card">
+            <h2>Throughput
+              <span class="right chips" id="chart-chips">
+                <button class="chip active" data-series="tokens">tok/s</button>
+                <button class="chip" data-series="requests">req/min</button>
+                <button class="chip" data-series="gpu">GPU util</button>
+              </span>
+            </h2>
+            <div id="big-chart" style="height:190px"></div>
+            <div class="legend">
+              <span id="big-chart-max" class="mono" style="margin-left:auto"></span>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h2>GPU · NVIDIA RTX 4090 <span class="right mono" id="hw-power">287 W</span></h2>
+              <div class="donut-wrap">
+                <svg width="132" height="132" viewBox="0 0 42 42" id="vram-donut"></svg>
+                <div class="seg-legend" id="vram-legend"></div>
+              </div>
+              <div style="border-top:1px solid var(--line-soft); margin-top:13px; padding-top:5px">
+                <div class="hw-row"><span class="k">Utilisation</span><span class="meter"><i id="hw-util-bar" style="width:52%"></i></span><span class="v" id="hw-util">52 %</span></div>
+                <div class="hw-row"><span class="k">Temp</span><span class="meter green"><i id="hw-temp-bar" style="width:57%"></i></span><span class="v" id="hw-temp">61 °C</span></div>
+              </div>
+            </div>
+            <div class="card">
+              <h2>Host</h2>
+              <div class="hw-row"><span class="k">CPU</span><span class="meter"><i id="hw-cpu-bar"></i></span><span class="v" id="hw-cpu">9 %</span></div>
+              <div class="hw-row"><span class="k">Memory</span><span class="meter blue"><i style="width:33%"></i></span><span class="v">21.4 / 64 GB</span></div>
+              <div class="hw-row"><span class="k">Models disk</span><span class="meter"><i style="width:4%"></i></span><span class="v">62.5 GB used</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid g23">
+          <div class="card">
+            <h2>Active servers <span class="right"><button class="btn sm" data-goto="servers">Inspect →</button></span></h2>
+            <div class="list">
+              <div class="row-item server-row" data-server="s1">
+                <span class="pill running"><span class="dot"></span>running</span>
+                <div class="grow">
+                  <div class="title">qwen3-14b <span class="kbd">:8081</span></div>
+                  <div class="meta"><span>qwen/qwen3-14b-q5_k_m.gguf</span><span>ctx 32768</span><span>pid 4182320</span></div>
+                </div>
+                <div class="right">up 3 h 24 m<br><span class="num" style="color:var(--text)">46.2 tok/s</span></div>
+              </div>
+              <div class="row-item server-row" data-server="s2">
+                <span class="pill running"><span class="dot"></span>running</span>
+                <div class="grow">
+                  <div class="title">embeddings <span class="kbd">:8083</span></div>
+                  <div class="meta"><span>embeddings/bge-m3-q8_0.gguf</span><span>ctx 8192</span><span>pid 4101567</span></div>
+                </div>
+                <div class="right">up 26 h 04 m<br><span class="num" style="color:var(--text)">1 240 tok/s</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Gateway</h2>
+            <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">
+              One OpenAI-compatible entry point. LiteLLM keeps owning keys and policies; aliases stay stable across ports.
+            </div>
+            <div class="argbox" style="white-space:pre-wrap">POST http://127.0.0.1:8090/v1/chat/completions
+  "model": "qwen3-14b"   → 127.0.0.1:8081
+  "model": "embeddings"  → 127.0.0.1:8083</div>
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+              <span class="badge live">GET /v1/models</span>
+              <span class="badge">chat · completions</span>
+              <span class="badge">embeddings</span>
+              <span class="badge">responses</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================== SERVERS =================== -->
+      <section class="view" id="view-servers">
+        <div class="list" id="server-list"></div>
+      </section>
+
+      <!-- =================== SERVER DETAIL (opened by clicking a row) =================== -->
+      <section class="view" id="view-server">
+        <div class="back-row">
+          <button class="btn sm" id="server-back">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            Servers
+          </button>
+          <span class="grow"></span>
+          <span id="server-actions" style="display:flex;gap:8px"></span>
+        </div>
+        <div id="server-detail"></div>
+      </section>
+
+      <!-- =================== DOWNLOADS =================== -->
+      <section class="view" id="view-downloads">
+        <div class="grid g23" style="margin-bottom:14px">
+          <div class="card">
+            <h2>New download <span class="right">public Hugging Face repos · exact GGUF filenames</span></h2>
+            <div class="f2">
+              <div class="field">
+                <label>Repository</label>
+                <input type="text" placeholder="owner/name" value="bartowski/Qwen2.5-14B-Instruct-GGUF">
+              </div>
+              <div class="field">
+                <label>Revision <span class="opt">(optional)</span></label>
+                <input type="text" placeholder="main">
+              </div>
+            </div>
+            <div class="field">
+              <label>Files <span class="opt">(one per line, subdirectories allowed)</span></label>
+              <textarea rows="3">qwen2.5-14b-instruct-q6_k_m.gguf</textarea>
+              <div class="hint">Transfers land as <span class="mono">.part</span> files and are verified before the final name is claimed. Existing files are never replaced.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn primary" id="btn-queue">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                Queue download
+              </button>
+              <span style="font-size:12px;color:var(--muted)">Parallel slots <b class="num" style="color:var(--text)">1 / 3</b> in use</span>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Bandwidth <span class="right num" id="bw-now">47.8 MB/s</span></h2>
+            <div id="bw-chart" style="height:150px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Jobs</h2>
+          <div class="list" id="job-list"></div>
+        </div>
+      </section>
+
+      <!-- =================== FILES =================== -->
+      <section class="view" id="view-files">
+        <div class="card">
+          <h2>Model inventory <span class="right" id="files-summary"></span></h2>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="file-search" placeholder="Filter by name or path…">
+            </div>
+            <span class="badge">8 GGUF files</span>
+            <span class="badge">scan of /srv/models/gguf</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="file-table">
+              <thead>
+                <tr><th>File</th><th style="width:110px">Size</th><th style="width:150px">Modified</th><th style="width:190px">Status</th><th style="width:130px"></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div class="foot-note">
+        <span>models /srv/models/gguf</span>
+        <span>binary ~/llama.cpp/build/bin/llama-server</span>
+        <span>state ~/.local/share/llama-desk/state.json</span>
+        <span>listen 127.0.0.1:8090</span>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ launch drawer ============ -->
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-label="Launch a model server">
+    <header>
+      <h2>Launch model server</h2>
+      <button class="x icon btn" id="drawer-close" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="body">
+      <div class="note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <span>Model, API alias, host and port are owned by the manager. Pass everything else as arguments. No shell evaluation.</span>
+      </div>
+      <div class="field">
+        <label>Model file</label>
+        <select>
+          <option>qwen2.5-coder-14b-instruct-q5_k_m.gguf (10.9 GB)</option>
+          <option>gemma-3-12b-it-qat-q4_0.gguf (7.7 GB)</option>
+          <option>deepseek-r1-distill-qwen-7b-q4_k_m.gguf (4.7 GB)</option>
+          <option>gpt-oss-20b-mxfp4.gguf (12.1 GB)</option>
+          <option>qwen3-30b-a3b-instruct-2507-q3_k_m.gguf (15.2 GB)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API model name <span class="opt">(passed as --alias, unique while running)</span></label>
+        <input type="text" value="qwen25-coder-14b">
+      </div>
+      <div class="f2">
+        <div class="field">
+          <label>Context size</label>
+          <input type="number" value="16384">
+        </div>
+        <div class="field">
+          <label>GPU layers</label>
+          <input type="number" value="49">
+        </div>
+      </div>
+      <div class="field">
+        <label>Port <span class="opt">(binds 127.0.0.1)</span></label>
+        <input type="number" value="8082">
+        <div class="hint">Port 8082 is free; the failed <span class="mono">gemma3-12b-vision</span> run released it.</div>
+      </div>
+      <div class="field">
+        <label>Extra arguments <span class="opt">(one argument per line)</span></label>
+        <textarea rows="4">--parallel
+1
+--jinja
+--flash-attn</textarea>
+        <div class="hint">Managed flags are rejected: <span class="mono">-m --alias --host --port --hf-repo …</span></div>
+      </div>
+      <div class="field">
+        <label>Environment overrides <span class="opt">(NAME=value, one per line)</span></label>
+        <textarea rows="2">CUDA_VISIBLE_DEVICES=GPU-9682481c-77d1-da9c-c6bc-0c8374984d36</textarea>
+        <div class="hint"><span class="mono">LLAMA_ARG_*</span> variables are stripped; use launch arguments instead. Stored in plaintext, owner-only <span class="mono">state.json</span>.</div>
+      </div>
+    </div>
+    <footer>
+      <button class="btn" id="drawer-cancel">Cancel</button>
+      <button class="btn primary" id="drawer-launch">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 21 12 6 21"/></svg>
+        Launch
+      </button>
+    </footer>
+  </aside>
+
+  <div class="toasts" id="toasts"></div>
+</div>
+
+<script>
+/* ============================================================
+   llama-desk UI mockup — static data + light simulation so the
+   charts, counters and progress bars feel alive in the browser.
+   Data shapes mirror /api/state: settings, models, jobs, runs.
+   ============================================================ */
+(function () {
+  'use strict';
+  var $ = function (s, el) { return (el || document).querySelector(s); };
+  var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
+
+  /* ---------- theme ---------- */
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('#ico-sun').style.display = t === 'dark' ? '' : 'none';
+    $('#ico-moon').style.display = t === 'dark' ? 'none' : '';
+    try { localStorage.setItem('ld-theme', t); } catch (e) {}
+    drawBigChart(); drawBwChart(); drawAllSparks(); drawDonut();
+  }
+  var saved = null;
+  try { saved = localStorage.getItem('ld-theme'); } catch (e) {}
+  var theme = saved || 'dark';
+
+  /* ---------- navigation ---------- */
+  var TITLES = {
+    dashboard: ['Dashboard', 'Overview of active servers, served tokens and hardware'],
+    servers: ['Servers', 'Managed llama-server processes, logs and launch configuration'],
+    downloads: ['Downloads', 'Hugging Face transfers with resume, cancel and bounded parallelism'],
+    files: ['Model files', 'GGUF inventory, saved launch profiles and deletion']
+  };
+  var suppressHash = false;
+  function setHash(h) { suppressHash = true; location.hash = h; }
+  function activate(view) {
+    $$('.view').forEach(function (v) { v.classList.toggle('active', v.id === 'view-' + view); });
+    $$('.nav-btn').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-nav') === view || (view === 'server' && b.getAttribute('data-nav') === 'servers'));
+    });
+    state.view = view;
+  }
+  function show(view) {
+    if (!TITLES[view]) view = 'dashboard';
+    state.currentServer = null;
+    activate(view);
+    $('#view-title').textContent = TITLES[view][0];
+    $('#view-sub').textContent = TITLES[view][1];
+    setHash('#/' + view);
+    if (view === 'servers') drawAllSparks();
+    if (view === 'downloads') drawBwChart();
+  }
+  function route() {
+    var m = (location.hash || '').replace(/^#\/?/, '').split('/');
+    if (m[0] === 'server' && m[1]) openServer(m[1], true);
+    else show(m[0]);
+  }
+  window.addEventListener('hashchange', function () {
+    if (suppressHash) { suppressHash = false; return; }
+    route();
+  });
+  $$('.nav-btn').forEach(function (b) {
+    b.addEventListener('click', function () { show(b.getAttribute('data-nav')); });
+  });
+  $$('[data-goto]').forEach(function (el) {
+    el.addEventListener('click', function () { show(el.getAttribute('data-goto')); });
+  });
+  $$('[data-server]').forEach(function (el) {
+    el.addEventListener('click', function () { openServer(el.getAttribute('data-server')); });
+  });
+  $('#server-back').addEventListener('click', function () { show('servers'); });
+
+  /* ---------- toast ---------- */
+  function toast(msg, ok) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (ok ? ' ok' : '');
+    t.innerHTML = '<span class="dot"></span><span></span>';
+    t.lastChild.textContent = msg;
+    $('#toasts').appendChild(t);
+    setTimeout(function () { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; }, 2600);
+    setTimeout(function () { t.remove(); }, 3000);
+  }
+
+  /* ---------- drawer ---------- */
+  var app = $('#app');
+  function openDrawer() { app.classList.add('drawer-open'); }
+  function closeDrawer() { app.classList.remove('drawer-open'); }
+  $('#btn-launch').addEventListener('click', openDrawer);
+  $('#drawer-close').addEventListener('click', closeDrawer);
+  $('#drawer-cancel').addEventListener('click', closeDrawer);
+  $('#scrim').addEventListener('click', closeDrawer);
+  $('#drawer-launch').addEventListener('click', function () {
+    closeDrawer();
+    toast('Launch request would POST /api/runs (mockup only)');
+  });
+  $('#btn-queue').addEventListener('click', function () {
+    toast('Queued: repo + 1 file would POST /api/downloads (mockup only)');
+  });
+
+  /* ---------- formatters ---------- */
+  function fmtGB(b) { return (b / 1e9).toFixed(1).replace('.', ',') + ' GB'; }
+  function fmtSize(b) {
+    if (b >= 1e9) return (b / 1e9).toFixed(1).replace('.', ',') + ' GB';
+    if (b >= 1e6) return (b / 1e6).toFixed(1).replace('.', ',') + ' MB';
+    return Math.round(b / 1e3) + ' kB';
+  }
+  function fmtM(n) { return (n / 1e6).toFixed(2).replace('.', ',') + ' M'; }
+  function fmtMBps(v) { return (v / 1e6).toFixed(1).replace('.', ',') + ' MB/s'; }
+
+  /* ---------- chart helpers (inline SVG, no deps) ---------- */
+  function walk(arr, min, max, step) {
+    var next = arr[arr.length - 1] + (Math.random() - 0.5) * 2 * step;
+    if (next < min) next = min + (min - next) * 0.5;
+    if (next > max) next = max - (next - max) * 0.5;
+    arr.push(next); arr.shift(); return arr;
+  }
+  function series(n, base, jitter) {
+    var a = [], v = base;
+    for (var i = 0; i < n; i++) { v += (Math.random() - 0.5) * jitter; v = Math.max(base * 0.45, Math.min(base * 1.6, v)); a.push(v); }
+    return a;
+  }
+  function paths(vals, w, h) {
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    var span = (max - min) || 1, pad = 3;
+    var pts = vals.map(function (v, i) {
+      return [i * (w / (vals.length - 1)), h - pad - ((v - min) / span) * (h - pad * 2)];
+    });
+    var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
+    var area = line + ' L ' + w + ' ' + h + ' L 0 ' + h + ' Z';
+    return { line: line, area: area, max: max, min: min };
+  }
+  function spark(el, vals, color) {
+    if (!el) return;
+    var w = 120, h = 30, p = paths(vals, w, h);
+    el.innerHTML =
+      '<svg class="chart chart-area" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="height:100%">' +
+      '<path class="area" d="' + p.area + '" fill="' + color + '22"/>' +
+      '<path class="line" d="' + p.line + '" stroke="' + color + '"/>' +
+      '</svg>';
+  }
+
+  var state = {
+    tokens: series(60, 138, 30),      // aggregate tok/s
+    requests: series(60, 24, 8),      // req/min
+    gpu: series(60, 52, 14),          // % util
+    bw: series(45, 47.8e6, 9e6),      // bytes/s
+    cpu: 9, temp: 61, power: 287,
+    tokensToday: 1284930,
+    bigMode: 'tokens',
+    logsLen: {}
+  };
+  function drawAllSparks() {
+    spark($('#spark-tokens'), state.tokens, '#34d399');
+    spark($('#spark-req'), state.requests, '#60a5fa');
+    state.servers.forEach(function (s) { spark($('#sspark-' + s.id), s.tpsSeries, '#34d399'); });
+  }
+
+  function drawBigChart() {
+    var el = $('#big-chart'); if (!el) return;
+    var vals, color, unit, isBar = false;
+    if (state.bigMode === 'tokens') { vals = state.tokens; color = '#34d399'; unit = ' tok/s'; }
+    else if (state.bigMode === 'requests') { vals = state.requests; color = '#60a5fa'; unit = ' req/min'; isBar = true; }
+    else { vals = state.gpu; color = '#fbbf24'; unit = ' %'; }
+    var w = 640, h = 190, html = '';
+    if (isBar) {
+      var max = Math.max.apply(null, vals), bw = w / vals.length;
+      html = '<svg class="chart" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="height:100%">';
+      vals.forEach(function (v, i) {
+        var bh = (v / max) * (h - 8);
+        html += '<rect class="bar" x="' + (i * bw + bw * 0.18).toFixed(1) + '" y="' + (h - bh).toFixed(1) +
+          '" width="' + (bw * 0.64).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="' + color + '" opacity="' + (0.35 + 0.65 * v / max).toFixed(2) + '"/>';
+      });
+      html += '</svg>';
+    } else {
+      var p = paths(vals, w, h);
+      html = '<svg class="chart chart-area" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" style="height:100%">' +
+        [0.25, 0.5, 0.75].map(function (f) {
+          return '<path class="gridline" d="M0 ' + (h * f).toFixed(1) + ' H' + w + '"/>';
+        }).join('') +
+        '<path class="area" d="' + p.area + '" fill="' + color + '1e"/>' +
+        '<path class="line" d="' + p.line + '" stroke="' + color + '"/></svg>';
+    }
+    el.innerHTML = html;
+    $('#big-chart-max').textContent = 'peak ' + Math.round(Math.max.apply(null, vals)) + unit;
+  }
+  $$('#chart-chips .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      $$('#chart-chips .chip').forEach(function (x) { x.classList.remove('active'); });
+      c.classList.add('active');
+      state.bigMode = c.getAttribute('data-series');
+      drawBigChart();
+    });
+  });
+
+  function drawBwChart() {
+    var el = $('#bw-chart'); if (!el) return;
+    spark(el, state.bw.map(function (v) { return v / 1e6; }), '#60a5fa');
+    $('#bw-chart').innerHTML = el.innerHTML; // keep same look
+  }
+
+  /* ---------- VRAM donut ---------- */
+  var VRAM_TOTAL = 24;
+  function drawDonut() {
+    var segs = [
+      { label: 'qwen3-14b', v: 11.2, c: '#34d399' },
+      { label: 'embeddings (bge-m3)', v: 1.4, c: '#60a5fa' },
+      { label: 'CUDA context', v: 0.6, c: '#a78bfa' }
+    ];
+    var used = segs.reduce(function (a, s) { return a + s.v; }, 0);
+    var C = 2 * Math.PI * 15.915, off = 25, svg = '';
+    svg += '<circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--panel-2)" stroke-width="4.4"/>';
+    segs.forEach(function (s) {
+      var frac = s.v / VRAM_TOTAL * 100;
+      svg += '<circle cx="21" cy="21" r="15.915" fill="none" stroke="' + s.c + '" stroke-width="4.4" ' +
+        'stroke-dasharray="' + frac + ' ' + (100 - frac) + '" stroke-dashoffset="' + off + '" stroke-linecap="round"/>';
+      off -= frac;
+    });
+    svg += '<text x="21" y="20.4" text-anchor="middle" font-size="6.4" font-weight="700" fill="var(--text)">' + used.toFixed(1) + '</text>' +
+      '<text x="21" y="25.4" text-anchor="middle" font-size="3.4" fill="var(--muted)">of 24 GB</text>';
+    $('#vram-donut').innerHTML = svg;
+    $('#vram-legend').innerHTML = segs.map(function (s) {
+      return '<div class="l"><span class="sw" style="background:' + s.c + '"></span>' + s.label + '<span class="num">' + s.v.toFixed(1) + ' GB</span></div>';
+    }).join('') + '<div class="l"><span class="sw" style="background:var(--panel-2)"></span>Free<span class="num">' + (VRAM_TOTAL - used).toFixed(1) + ' GB</span></div>';
+  }
+
+  /* ---------- servers ---------- */
+  var LOG_QWEN = [
+    ['dim', '0.00.114 I log_info: verbosity = 3 (adjust with the `-hv` argument)'],
+    ['i',   '0.00.208 I main: llama.cpp b5124 (8f2a91c)'],
+    ['i',   '0.00.441 I load_hparams: Qwen3 ForCausalLM version cleaned up'],
+    ['i',   '0.01.002 I load_tensors: offloading 40 repeating layers to GPU'],
+    ['i',   '0.12.887 I srv   params: model = "/srv/models/gguf/qwen/qwen3-14b-q5_k_m.gguf"'],
+    ['i',   '0.13.556 I srv    loadmodel: loading model: /srv/models/gguf/qwen/qwen3-14b-q5_k_m.gguf'],
+    ['w',   '0.14.001 W srv    loadmodel: ctx size 32768 > train ctx 4096, using YaRN not required'],
+    ['i',   '0.41.230 I init: model loaded, prompt format = OpenAI'],
+    ['i',   '0.41.998 I server        HTTP listening on 127.0.0.1:8081 (protocol http)'],
+    ['i',   'slot print_timing: id  3 | task 1188 | pred eval time = 1204 ms / 52 tokens (23.15 ms per token, 43.19 tokens per second)'],
+    ['dim', 'POST /v1/chat/completions HTTP/1.1 200'],
+    ['dim', 'GET  /health HTTP/1.1 200']
+  ];
+  var LOG_EMB = [
+    ['i',   '0.00.190 I main: llama.cpp b5124 (8f2a91c)'],
+    ['i',   '0.00.882 I load_hparams: BERT embd n_embd = 1024 pooling = LAST'],
+    ['i',   '0.09.114 I load_tensors: offloaded 9/9 layers to GPU'],
+    ['i',   '0.11.447 I server        HTTP listening on 127.0.0.1:8083 (protocol http)'],
+    ['dim', 'POST /v1/embeddings HTTP/1.1 200'],
+    ['dim', 'POST /v1/embeddings HTTP/1.1 200']
+  ];
+  var LOG_FAIL = [
+    ['i',   '0.00.204 I main: llama.cpp b5124 (8f2a91c)'],
+    ['i',   '0.03.771 I load_tensors: offloading 48 repeating layers to GPU'],
+    ['e',   '0.19.882 E load_tensors: failed to allocate 2.14 GiB for buffer'],
+    ['e',   'CUDA out of memory. tried to allocate 2.14 GiB. 0.61 GiB free'],
+    ['e',   '0.19.990 E common_init_from_params: failed to load model']
+  ];
+
+  state.servers = [
+    { id: 's1', name: 'qwen3-14b', port: 8081, model: 'qwen/qwen3-14b-q5_k_m.gguf', pid: 4182320,
+      status: 'running', health: 'ok', started: 'today 08:12', uptime: '3 h 24 m', ctx: 32768, gpuL: '40 / 40',
+      vram: '11.2 GB', tps: 46.2, tpsSeries: series(24, 46, 8),
+      args: ['--parallel', '1', '--jinja', '--flash-attn'],
+      env: ['CUDA_VISIBLE_DEVICES=GPU-9682481c-77d1-da9c-c6bc-0c8374984d36'],
+      cmd: 'llama-server --model /srv/models/gguf/qwen/qwen3-14b-q5_k_m.gguf --ctx-size 32768 --n-gpu-layers 40 --parallel 1 --jinja --flash-attn --alias qwen3-14b --host 127.0.0.1 --port 8081',
+      log: LOG_QWEN },
+    { id: 's2', name: 'embeddings', port: 8083, model: 'embeddings/bge-m3-q8_0.gguf', pid: 4101567,
+      status: 'running', health: 'ok', started: 'yesterday 09:32', uptime: '26 h 04 m', ctx: 8192, gpuL: '9 / 9',
+      vram: '1.4 GB', tps: 1240, tpsSeries: series(24, 1180, 260),
+      args: ['--embedding', '--pooling', 'last'],
+      env: [],
+      cmd: 'llama-server --model /srv/models/gguf/embeddings/bge-m3-q8_0.gguf --ctx-size 8192 --n-gpu-layers 9 --embedding --pooling last --alias embeddings --host 127.0.0.1 --port 8083',
+      log: LOG_EMB },
+    { id: 's3', name: 'gemma3-12b-vision', port: 8082, model: 'gemma-3-12b-it-qat-q4_0.gguf', pid: null,
+      status: 'failed', health: null, started: 'today 09:40', uptime: 'exited after 9 s', ctx: 16384, gpuL: '99',
+      error: 'CUDA out of memory while loading tensors: 0.61 GiB free. Stop another server or lower GPU layers, then run again.',
+      vram: '—', tps: null, tpsSeries: series(24, 8, 3),
+      args: ['--mmproj', '/srv/models/gguf/gemma-3-12b-it-qat-f16/mmproj-BF16.gguf'],
+      env: [],
+      cmd: 'llama-server --model /srv/models/gguf/gemma-3-12b-it-qat-q4_0.gguf --ctx-size 16384 --n-gpu-layers 99 --mmproj /srv/models/gguf/gemma-3-12b-it-qat-f16/mmproj-BF16.gguf --alias gemma3-12b-vision --host 127.0.0.1 --port 8082',
+      log: LOG_FAIL },
+    { id: 's4', name: 'gpt-oss-20b', port: 8084, model: 'gpt-oss-20b-mxfp4.gguf', pid: null,
+      status: 'stopped', health: null, started: 'yesterday 15:04', uptime: 'stopped 22:15 · exit 0', ctx: 32768, gpuL: '24',
+      vram: '—', tps: null, tpsSeries: series(24, 30, 9),
+      args: [], env: [],
+      cmd: 'llama-server --model /srv/models/gguf/gpt-oss-20b-mxfp4.gguf --ctx-size 32768 --n-gpu-layers 24 --alias gpt-oss-20b --host 127.0.0.1 --port 8084',
+      log: [['dim', 'graceful stop: SIGTERM sent, exited within 1 s']] }
+  ];
+
+  function logHtml(lines) {
+    return lines.map(function (l) { return '<span class="' + l[0] + '">' + l[1].replace(/</g, '&lt;') + '</span>'; }).join('\n');
+  }
+  function serverActionsHtml(s) {
+    var main = s.status === 'running'
+      ? '<button class="btn sm danger" data-stop="' + s.id + '"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop</button>'
+      : s.status === 'stopping'
+        ? '<button class="btn sm" disabled>Stopping…</button>'
+        : '<button class="btn sm" data-run="' + s.id + '"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 21 12 6 21"/></svg>Run again</button>';
+    return main + '<button class="btn sm" data-copy="' + s.id + '">Copy command</button>';
+  }
+  function renderServers() {
+    $('#server-list').innerHTML = state.servers.map(function (s) {
+      return '<div class="row-item server-row" data-open="' + s.id + '">' +
+        '<span class="pill ' + s.status + '" id="spill-' + s.id + '"><span class="dot"></span>' + s.status + '</span>' +
+        '<div class="grow"><div class="title">' + s.name + ' <span class="kbd">:' + s.port + '</span></div>' +
+        '<div class="meta"><span class="mono">' + s.model + '</span><span>' + s.uptime + '</span></div></div>' +
+        (s.status === 'running' ? '<div class="right sr-right"><span class="num" id="sps-' + s.id + '" style="color:var(--text)">' + s.tps.toFixed(1) + ' tok/s</span></div>' : '') +
+        '<span class="chev"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></span>' +
+      '</div>';
+    }).join('');
+    $$('#server-list [data-open]').forEach(function (row) {
+      row.addEventListener('click', function () { openServer(row.getAttribute('data-open')); });
+    });
+  }
+  function serverDetailHtml(s) {
+    var args = s.args.length ? s.args.join('\n') : '(none)';
+    var env = s.env.length ? s.env.join('\n') : '(none)';
+    var running = s.status === 'running' || s.status === 'stopping';
+    var banner = s.error
+      ? '<div class="err-banner"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>' + s.error + '</span></div>'
+      : '';
+    return banner +
+      '<div class="grid g4" style="margin-bottom:14px">' +
+        '<div class="card stat"><div class="label">Status</div>' +
+          '<div style="margin-top:11px" id="dpill-' + s.id + '">' +
+            (s.status === 'running' ? '<span class="pill ok"><span class="dot"></span>healthy</span>' : '<span class="pill ' + s.status + '">' + s.status + '</span>') +
+          '</div>' +
+          '<div class="foot"><span class="delta">' + (s.status === 'running' ? 'GET /health → 200' : 'process not serving') + '</span></div></div>' +
+        '<div class="card stat"><div class="label">Process</div>' +
+          '<div class="value num" style="font-size:19px">' + (s.pid || '—') + '</div>' +
+          '<div class="foot"><span class="delta">' + s.uptime + '</span></div></div>' +
+        '<div class="card stat"><div class="label">VRAM</div>' +
+          '<div class="value num" style="font-size:19px">' + s.vram + '</div>' +
+          '<div class="foot"><span class="delta">ctx ' + s.ctx.toLocaleString('en-US') + ' · ' + s.gpuL + ' GPU layers</span></div></div>' +
+        '<div class="card stat"><div class="label">Throughput</div>' +
+          (running
+            ? '<div class="value num" id="ssps-' + s.id + '" style="font-size:19px">' + s.tps.toFixed(1) + '<small> tok/s</small></div>' +
+              '<div class="foot"><span class="delta">decode</span><span class="spark" id="sspark-' + s.id + '"></span></div>'
+            : '<div class="value" style="font-size:19px">—</div><div class="foot"><span class="delta">not running</span></div>') +
+        '</div>' +
+      '</div>' +
+      '<div class="grid g23">' +
+        '<div class="card"><h2>Launch configuration</h2>' +
+          '<div class="kv">' +
+            '<span class="k">Model</span><span class="v mono">' + s.model + '</span>' +
+            '<span class="k">Endpoint</span><span class="v mono">http://127.0.0.1:' + s.port + '</span>' +
+            '<span class="k">Alias</span><span class="v mono">' + s.name + '</span>' +
+            '<span class="k">Started</span><span class="v">' + s.started + '</span>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin:12px 0 4px">Arguments</div><div class="argbox">' + args.replace(/</g, '&lt;') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin:10px 0 4px">Environment overrides</div><div class="argbox">' + env.replace(/</g, '&lt;') + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin:10px 0 4px">Full command</div><div class="argbox" style="white-space:pre-wrap">' + s.cmd.replace(/</g, '&lt;') + '</div>' +
+        '</div>' +
+        '<div class="card"><h2>Live log <span class="right">last 128 KiB</span></h2>' +
+          '<div class="console tall" id="log-' + s.id + '">' + logHtml(s.log) + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+  function openServer(id, fromHash) {
+    var s = state.servers.filter(function (x) { return x.id === id; })[0];
+    if (!s) { show('servers'); return; }
+    state.currentServer = id;
+    activate('server');
+    $('#view-title').textContent = s.name;
+    $('#view-sub').textContent = s.model + ' · 127.0.0.1:' + s.port;
+    $('#server-detail').innerHTML = serverDetailHtml(s);
+    $('#server-actions').innerHTML = serverActionsHtml(s);
+    var stop = $('#server-actions [data-stop]');
+    if (stop) stop.addEventListener('click', function () {
+      s.status = 'stopping';
+      ['#spill-' + s.id, '#dpill-' + s.id].forEach(function (sel) {
+        var el = $(sel);
+        if (el) { el.className = 'pill stopping'; el.innerHTML = '<span class="dot"></span>stopping'; }
+      });
+      var sp = $('#sps-' + s.id); if (sp) sp.textContent = '—';
+      $('#server-actions').innerHTML = serverActionsHtml(s);
+      toast('SIGTERM sent to ' + s.name + '. SIGKILL after 5 s if it lingers (mockup only)');
+    });
+    var run = $('#server-actions [data-run]');
+    if (run) run.addEventListener('click', function () {
+      openDrawer();
+      toast('Saved launch profile for ' + s.model + ' would prefill the form');
+    });
+    var copy = $('#server-actions [data-copy]');
+    if (copy) copy.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(s.cmd);
+      toast('Command copied', true);
+    });
+    if (running) spark($('#sspark-' + id), s.tpsSeries, '#34d399');
+    if (!fromHash) setHash('#/server/' + id);
+  }
+
+  /* ---------- downloads ---------- */
+  var jobs = [
+    { id: 'j1', file: 'qwen2.5-14b-instruct-q6_k_m.gguf', repo: 'bartowski/Qwen2.5-14B-Instruct-GGUF', rev: 'main',
+      status: 'downloading', bytes: 8.9e9, total: 12.4e9, bps: 47.8e6 },
+    { id: 'j2', file: 'gemma-3-12b-it-qat-q4_0-gguf.gguf', repo: 'lmstudio-community/gemma-3-12b-it-GGUF', rev: 'main',
+      status: 'queued', bytes: 0, total: 7.7e9, bps: 0 },
+    { id: 'j3', file: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf', repo: 'bartowski/Meta-Llama-3.1-8B-Instruct-GGUF', rev: 'main',
+      status: 'interrupted', bytes: 3.4e9, total: 5.0e9, bps: 0, error: 'unexpected EOF (connection reset). Resume continues from byte 3 400 100 000' },
+    { id: 'j4', file: 'tinyllamas/stories260K.gguf', repo: 'ggml-org/models', rev: 'main',
+      status: 'completed', bytes: 2.4e5, total: 2.4e5, bps: 0 }
+  ];
+  function eta(j) {
+    if (j.status !== 'downloading' || !j.bps) return '—';
+    var s = Math.round((j.total - j.bytes) / j.bps);
+    return Math.floor(s / 60) + ' m ' + String(s % 60).padStart(2, '0') + ' s';
+  }
+  function renderJobs() {
+    $('#job-list').innerHTML = jobs.map(function (j) {
+      var pct = j.total ? Math.min(100, j.bytes / j.total * 100) : 0;
+      var barCls = j.status === 'completed' ? 'done' : (j.status === 'interrupted' || j.status === 'failed') ? 'failed' : '';
+      var actions = '';
+      if (j.status === 'downloading') actions = '<button class="btn sm danger" data-job="cancel" data-id="' + j.id + '">Cancel</button>';
+      else if (j.status === 'interrupted' || j.status === 'failed') actions = '<button class="btn sm" data-job="resume" data-id="' + j.id + '">Resume</button>';
+      else if (j.status === 'queued') actions = '<button class="btn sm danger" data-job="cancel" data-id="' + j.id + '">Remove</button>';
+      return '<div class="row-item" style="align-items:flex-start" id="job-' + j.id + '">' +
+        '<span class="pill ' + j.status + '" style="margin-top:2px"><span class="dot"></span>' + j.status + '</span>' +
+        '<div class="grow">' +
+          '<div class="title">' + j.file + '</div>' +
+          '<div class="meta"><span class="mono">' + j.repo + '</span><span>@' + j.rev + '</span></div>' +
+          '<div class="dl-progress"><div class="bar ' + barCls + '"><i data-fill="' + j.id + '" style="width:' + pct.toFixed(1) + '%"></i></div>' +
+          '<div class="labels"><span id="lbl-' + j.id + '">' + fmtSize(j.bytes) + ' / ' + fmtSize(j.total) + ' · ' + pct.toFixed(0) + '%</span>' +
+          '<span>' + (j.bps ? fmtMBps(j.bps) + ' · ETA ' + eta(j) : (j.status === 'completed' ? 'verified · final name claimed' : j.status === 'queued' ? 'waiting for a slot' : 'paused')) + '</span></div></div>' +
+          (j.error ? '<div class="err-line">⚠ ' + j.error + '</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:2px">' + actions + '</div>' +
+      '</div>';
+    }).join('');
+    $$('#job-list [data-job]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var j = jobs.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
+        var act = b.getAttribute('data-job');
+        if (act === 'cancel') { j.status = 'interrupted'; j.error = 'Cancelled by user. Resume continues from .part file'; j.bps = 0; }
+        else { j.status = 'downloading'; j.bps = 41e6; j.error = undefined; }
+        renderJobs();
+        toast(j.file + ' ' + (act === 'cancel' ? 'cancelled, .part kept' : 'resumed with ETag / If-Range'));
+      });
+    });
+  }
+
+  /* ---------- files ---------- */
+  var files = [
+    { name: 'qwen3-14b-q5_k_m.gguf', path: 'qwen/qwen3-14b-q5_k_m.gguf', size: 10.72e9, mod: '2026-10-28 14:22', state: 'running', alias: 'qwen3-14b', profile: true },
+    { name: 'bge-m3-q8_0.gguf', path: 'embeddings/bge-m3-q8_0.gguf', size: 1.16e9, mod: '2026-09-14 08:05', state: 'running', alias: 'embeddings', profile: true },
+    { name: 'gpt-oss-20b-mxfp4.gguf', path: 'gpt-oss-20b-mxfp4.gguf', size: 12.1e9, mod: '2026-10-02 19:48', state: 'stopped', profile: true },
+    { name: 'gemma-3-12b-it-qat-q4_0.gguf', path: 'gemma-3-12b-it-qat-q4_0.gguf', size: 7.73e9, mod: '2026-11-08 10:31', state: 'failed', profile: true },
+    { name: 'qwen2.5-coder-14b-instruct-q5_k_m.gguf', path: 'qwen/qwen2.5-coder-14b-instruct-q5_k_m.gguf', size: 10.9e9, mod: '2026-11-01 22:17', state: 'idle', profile: true },
+    { name: 'deepseek-r1-distill-qwen-7b-q4_k_m.gguf', path: 'deepseek/deepseek-r1-distill-qwen-7b-q4_k_m.gguf', size: 4.68e9, mod: '2026-10-19 12:40', state: 'idle', profile: false },
+    { name: 'qwen3-30b-a3b-instruct-2507-q3_k_m.gguf', path: 'qwen/qwen3-30b-a3b-instruct-2507-q3_k_m.gguf', size: 15.2e9, mod: '2026-10-30 07:55', state: 'idle', profile: false },
+    { name: 'stories260K.gguf', path: 'tinyllamas/stories260K.gguf', size: 2.4e5, mod: '2026-11-10 16:02', state: 'idle', profile: false }
+  ];
+  function fileActions(f) {
+    return '<div class="row-actions">' +
+      '<button class="btn sm" data-act="launch" data-f="' + f.path + '" title="Launch">▶</button>' +
+      '<button class="btn sm danger" data-act="del" data-f="' + f.path + '" title="Delete">Delete</button></div>';
+  }
+  function renderFiles(filter) {
+    filter = (filter || '').toLowerCase();
+    var rows = files.filter(function (f) { return !filter || f.path.toLowerCase().indexOf(filter) >= 0; });
+    $('#file-table tbody').innerHTML = rows.map(function (f) {
+      var status = '';
+      if (f.state === 'running') status = '<span class="badge live">● running · ' + f.alias + '</span>';
+      else if (f.state === 'failed') status = '<span class="badge" style="background:var(--red-soft);color:var(--red)">failed</span>' + (f.profile ? ' <span class="badge cfg">profile</span>' : '');
+      else if (f.state === 'stopped') status = '<span class="badge">stopped</span>' + (f.profile ? ' <span class="badge cfg">profile</span>' : '');
+      else status = f.profile ? '<span class="badge cfg">profile saved</span>' : '<span style="color:var(--faint)">—</span>';
+      return '<tr data-path="' + f.path + '"><td><div class="fname">' + f.name + '</div><div class="fpath">' + f.path + '</div></td>' +
+        '<td class="num">' + fmtSize(f.size) + '</td><td class="num" style="color:var(--muted)">' + f.mod + '</td>' +
+        '<td>' + status + '</td><td>' + fileActions(f) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:28px">No files match</td></tr>';
+    var total = files.reduce(function (a, f) { return a + f.size; }, 0);
+    $('#files-summary').textContent = fmtGB(total) + ' in /srv/models/gguf';
+    $$('#file-table [data-act]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var path = b.getAttribute('data-f');
+        var f = files.filter(function (x) { return x.path === path; })[0];
+        if (b.getAttribute('data-act') === 'launch') { openDrawer(); toast('Launch form prefilled with saved profile for ' + f.name); }
+        else if (b.dataset.confirm) {
+          if (f.state === 'running') { toast('Stop ' + f.alias + ' before deleting its file'); return; }
+          files = files.filter(function (x) { return x.path !== path; });
+          renderFiles($('#file-search').value);
+          toast(f.name + ' deleted (mockup only)', true);
+        } else {
+          var cell = b.closest('td');
+          cell.innerHTML = '<div class="row-actions" style="opacity:1">' +
+            '<span style="font-size:12px;color:var(--red)">Delete?</span>' +
+            '<button class="btn sm danger" data-act="del" data-confirm="1" data-f="' + path + '">Yes</button>' +
+            '<button class="btn sm" data-act="keep">Keep</button></div>';
+          cell.querySelector('[data-confirm]').addEventListener('click', arguments.callee);
+          cell.querySelector('[data-act=keep]').addEventListener('click', function () {
+            cell.innerHTML = fileActions(f);
+            renderFiles($('#file-search').value);
+          });
+        }
+      });
+    });
+  }
+  $('#file-search').addEventListener('input', function () { renderFiles(this.value); });
+
+  /* ---------- simulation tick ---------- */
+  function tick() {
+    walk(state.tokens, 60, 220, 16);
+    walk(state.requests, 4, 60, 5);
+    walk(state.gpu, 18, 96, 8);
+    walk(state.bw, 22e6, 62e6, 5e6);
+    state.tokensToday += Math.round(state.tokens[state.tokens.length - 1] * 2);
+    $('#st-tokens').textContent = fmtM(state.tokensToday);
+    $('#st-tokens-rate').textContent = '≈ ' + Math.round(state.tokens[state.tokens.length - 1]) + ' tok/s now';
+    $('#st-rpm').textContent = Math.round(state.requests[state.requests.length - 1]);
+    state.cpu = Math.max(4, Math.min(30, state.cpu + (Math.random() - 0.5) * 3));
+    state.temp = Math.max(55, Math.min(72, state.temp + (Math.random() - 0.5) * 1.5));
+    state.power = Math.max(180, Math.min(360, state.power + (Math.random() - 0.5) * 22));
+    $('#hw-cpu-bar').style.width = state.cpu.toFixed(0) + '%';
+    $('#hw-cpu').textContent = state.cpu.toFixed(0) + ' %';
+    var util = state.gpu[state.gpu.length - 1];
+    $('#hw-util-bar').style.width = util.toFixed(0) + '%';
+    $('#hw-util').textContent = util.toFixed(0) + ' %';
+    $('#hw-temp-bar').style.width = ((state.temp - 40) / 50 * 100).toFixed(0) + '%';
+    $('#hw-temp').textContent = state.temp.toFixed(0) + ' °C';
+    $('#hw-power').textContent = Math.round(state.power) + ' W';
+    $('#bw-now').textContent = fmtMBps(state.bw[state.bw.length - 1]);
+
+    // per-server counters
+    state.servers.forEach(function (s) {
+      if (s.status !== 'running') return;
+      walk(s.tpsSeries, s.id === 's1' ? 30 : 700, s.id === 's1' ? 62 : 1650, s.id === 's1' ? 4 : 160);
+      var v = s.tpsSeries[s.tpsSeries.length - 1];
+      s.tps = v;
+      var main = $('#sps-' + s.id); if (main) main.textContent = v.toFixed(1) + ' tok/s';
+      var det = $('#ssps-' + s.id); if (det) det.textContent = v.toFixed(1) + ' tok/s';
+      var detailOpen = state.view === 'server' && state.currentServer === s.id;
+      if (detailOpen) spark($('#sspark-' + s.id), s.tpsSeries, '#34d399');
+      // tail the log of the open server detail
+      if (detailOpen && Math.random() < 0.75) {
+        var box = $('#log-' + s.id);
+        if (box) {
+          var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+          var ts = (Math.random() * 999).toFixed(0).padStart(3, '0') + '.' + (Math.random() * 999).toFixed(0).padStart(3, '0');
+          var line = '<span class="dim">slot print_timing: id  3 | task ' + (1200 + Math.floor(Math.random() * 400)) +
+            ' | eval time = ' + (200 + Math.floor(Math.random() * 900)) + ' ms (t/s: ' + v.toFixed(2) + ')</span>';
+          box.insertAdjacentHTML('beforeend', '\n' + line);
+          while (box.childElementCount > 220) box.removeChild(box.firstChild);
+          if (nearBottom) box.scrollTop = box.scrollHeight;
+        }
+      }
+    });
+
+    // downloads progress
+    var j1 = jobs.filter(function (j) { return j.id === 'j1'; })[0];
+    if (j1 && j1.status === 'downloading') {
+      j1.bps = state.bw[state.bw.length - 1];
+      j1.bytes = Math.min(j1.total, j1.bytes + j1.bps * 2);
+      var pct = j1.bytes / j1.total * 100;
+      var fill = $('[data-fill="j1"]');
+      if (fill) {
+        fill.style.width = pct.toFixed(2) + '%';
+        $('#lbl-j1').textContent = fmtSize(j1.bytes) + ' / ' + fmtSize(j1.total) + ' · ' + pct.toFixed(0) + '%';
+        var spans = $('#job-j1 .labels').children;
+        if (spans.length > 1) spans[1].textContent = fmtMBps(j1.bps) + ' · ETA ' + eta(j1);
+      }
+      if (j1.bytes >= j1.total) {
+        j1.status = 'completed'; j1.bps = 0;
+        renderJobs();
+        toast('qwen2.5-14b-instruct-q6_k_m.gguf verified, saved to /srv/models/gguf', true);
+        files.push({ name: 'qwen2.5-14b-instruct-q6_k_m.gguf', path: 'qwen2.5-14b-instruct-q6_k_m.gguf', size: j1.total, mod: 'just now', state: 'idle', profile: false });
+        renderFiles($('#file-search').value);
+      }
+    }
+
+    drawBigChart();
+    drawBwChart();
+    spark($('#spark-tokens'), state.tokens, '#34d399');
+    spark($('#spark-req'), state.requests, '#60a5fa');
+  }
+
+  /* ---------- boot ---------- */
+  renderServers();
+  renderJobs();
+  renderFiles('');
+  setTheme(theme);
+  route();
+  setInterval(tick, 2000);
+})();
+</script>
+</body>
+</html>
