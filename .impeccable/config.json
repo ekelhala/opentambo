@@ -1,3 +1,25 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "em-dash-overuse",
+        "value": "*",
+        "files": [
+          "mockup/tambo-design-language.html"
+        ],
+        "createdAt": "2026-11-13T18:58:27.798Z"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "mockup/tambo-design-language.html"
+        ],
+        "createdAt": "2026-11-13T18:58:52.793Z"
+      }
+    ]
+  }
 }

@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>tambo — design language</title>
+<title>tambo · design language</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   tambo — design language tokens
+   tambo: design language tokens
    The waystation for your models.
    Dark is primary: a terminal-adjacent operator, dim room,
    rack fan running. Light is the daylight rendition of the
@@ -17,7 +17,7 @@
    ============================================================ */
 
 :root {
-  /* corner language — angular, not pillowy.
+  /* corner language: angular, not pillowy.
      4px is the ceiling on controls, 6px on surfaces. */
   --t-r-0: 0px;
   --t-r-1: 2px;
@@ -57,19 +57,21 @@ html[data-theme="dark"] {
 
   --t-text:      #f0e9df;
   --t-text-2:    #b5a897;
-  --t-text-3:    #8a7a68;
+  --t-text-3:    #a8977f;
 
   --t-accent:      #e2622c;  /* madder, core 500 */
-  --t-accent-hover:#c94e1e;
-  --t-accent-press:#a53d18;
-  --t-accent-text: #f4ede3;  /* text on accent  — 5.2:1 */
-  --t-accent-ink:  #f0854f;  /* accent as text on dark  — 5.1:1 */
+  --t-accent-hover:#ea7141;  /* the lamp brightens, it does not sink */
+  --t-accent-press:#d4571f;
+  --t-accent-text: #1f0e05;  /* burnt-umber ink on madder, 5.4:1 */
+  --t-accent-ink:  #f0854f;  /* accent as text on dark, 7.1:1 */
   --t-accent-soft: rgba(226, 98, 44, 0.14);
   --t-accent-line: rgba(226, 98, 44, 0.42);
 
   --t-ok:    #4ac08a;  --t-ok-soft:  rgba(74, 192, 138, 0.13);
   --t-warn:  #e6b33f;  --t-warn-soft:rgba(230, 179, 63, 0.13);
   --t-bad:   #d64556;  --t-bad-soft: rgba(214, 69, 86, 0.14);
+  --t-bad-text:   #e86a76;  /* danger as text on dark ground, 5.5:1 */
+  --t-bad-strong: #b52f3c;  /* filled destructive button, 5.5:1 with cream */
   --t-info:  #7a9cd8;  --t-info-soft:rgba(122, 156, 216, 0.13);
 
   --t-shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
@@ -92,7 +94,7 @@ html[data-theme="light"] {
   --t-text-2:    #5d5041;
   --t-text-3:    #7d6e5c;
 
-  --t-accent:      #c94e1e;
+  --t-accent:      #b8451a;  /* same dye lot, one dip deeper for the daylight ground */
   --t-accent-hover:#a53d18;
   --t-accent-press:#833117;
   --t-accent-text: #fdf1ea;
@@ -103,6 +105,8 @@ html[data-theme="light"] {
   --t-ok:    #177a52;  --t-ok-soft:  rgba(23, 122, 82, 0.10);
   --t-warn:  #8f6a12;  --t-warn-soft:rgba(143, 106, 18, 0.12);
   --t-bad:   #b32a3d;  --t-bad-soft: rgba(179, 42, 61, 0.10);
+  --t-bad-text:   #b32a3d;
+  --t-bad-strong: #9c2133;
   --t-info:  #3a5e9e;  --t-info-soft:rgba(58, 94, 158, 0.10);
 
   --t-shadow-1: 0 1px 2px rgba(60,40,20,.10), 0 2px 8px rgba(60,40,20,.07);
@@ -225,7 +229,7 @@ h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margi
 .swatch .fill { height: 64px; }
 .swatch .meta { padding: 6px 8px 8px; background: var(--t-panel); }
 .swatch .name { font: 600 var(--t-fs-12)/1.3 var(--t-font-ui); display: block; }
-.swatch .hex  { font: 400 11px/1.4 var(--t-font-mono); color: var(--t-text-3); }
+.swatch .hex  { font: 400 var(--t-fs-12)/1.4 var(--t-font-mono); color: var(--t-text-3); }
 
 .semantic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
 .semantic {
@@ -237,7 +241,7 @@ h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margi
 .semantic:hover { border-color: var(--t-accent-line); }
 .semantic .dot { width: 34px; height: 34px; border-radius: var(--t-r-1); flex: none; }
 .semantic .name { font: 600 var(--t-fs-13)/1.3 var(--t-font-ui); display: block; }
-.semantic .use  { font: 400 11px/1.4 var(--t-font-mono); color: var(--t-text-3); }
+.semantic .use  { font: 400 var(--t-fs-12)/1.4 var(--t-font-mono); color: var(--t-text-3); }
 
 /* ============================================================ type specimens */
 .type-row {
@@ -260,7 +264,7 @@ h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margi
   border: 1px solid var(--t-accent-line); margin-bottom: 10px;
 }
 .shape-cell .name { font: 600 var(--t-fs-13)/1 var(--t-font-ui); }
-.shape-cell .note { font: 400 11px/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 3px; }
+.shape-cell .note { font: 400 var(--t-fs-12)/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 3px; }
 
 .depth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .depth-cell {
@@ -268,7 +272,7 @@ h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margi
   border-radius: var(--t-r-2); padding: 16px; min-height: 84px;
 }
 .depth-cell .name { font: 600 var(--t-fs-13)/1 var(--t-font-ui); }
-.depth-cell .note { font: 400 11px/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 4px; }
+.depth-cell .note { font: 400 var(--t-fs-12)/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 4px; }
 
 /* ============================================================ buttons */
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 16px; }
@@ -289,9 +293,9 @@ h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margi
 .btn-secondary:hover { border-color: var(--t-accent-line); background: var(--t-raised); }
 .btn-ghost { background: transparent; color: var(--t-text-2); }
 .btn-ghost:hover { background: var(--t-panel-2); color: var(--t-text); }
-.btn-danger { background: var(--t-bad); color: #fdf1f0; }
+.btn-danger { background: var(--t-bad-strong); color: #fdf1f0; }
 .btn-danger:hover { filter: brightness(1.1); }
-.btn-danger-ghost { background: transparent; color: var(--t-bad); border-color: var(--t-bad); }
+.btn-danger-ghost { background: transparent; color: var(--t-bad-text); border-color: var(--t-bad); }
 .btn-danger-ghost:hover { background: var(--t-bad-soft); }
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 .btn-sm { padding: 7px 12px; font-size: var(--t-fs-13); }
@@ -329,7 +333,7 @@ html[data-theme="light"] .textarea { background: var(--t-panel); }
   outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px var(--t-accent-soft);
 }
 .field-error .input { border-color: var(--t-bad); }
-.field-error .hint { color: var(--t-bad); }
+.field-error .hint { color: var(--t-bad-text); }
 .textarea { resize: vertical; font-family: var(--t-font-mono); font-size: var(--t-fs-13); }
 
 .check-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer; font-size: var(--t-fs-14); }
@@ -372,7 +376,7 @@ html[data-theme="light"] .checkbox { background: var(--t-panel); }
 .badge-ok::before { background: var(--t-ok); }
 .badge-warn { background: var(--t-warn-soft); color: var(--t-warn); border-color: color-mix(in srgb, var(--t-warn) 30%, transparent); }
 .badge-warn::before { background: var(--t-warn); animation: blink 1.6s ease-in-out infinite; }
-.badge-bad  { background: var(--t-bad-soft);  color: var(--t-bad);  border-color: color-mix(in srgb, var(--t-bad) 30%, transparent); }
+.badge-bad  { background: var(--t-bad-soft);  color: var(--t-bad-text);  border-color: color-mix(in srgb, var(--t-bad) 30%, transparent); }
 .badge-bad::before { background: var(--t-bad); }
 .badge-info { background: var(--t-info-soft); color: var(--t-info); border-color: color-mix(in srgb, var(--t-info) 30%, transparent); }
 .badge-info::before { background: var(--t-info); animation: blink 1.2s ease-in-out infinite; }
@@ -456,7 +460,7 @@ html[data-theme="light"] .preview-bar .url { background: var(--t-panel); }
 }
 .pane { padding: 22px; }
 .pane[hidden] { display: none; }
-.pane h4 { font-size: var(--t-fs-20); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+.pane h3 { font-size: var(--t-fs-20); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
 .pane .pane-lede { color: var(--t-text-2); font-size: var(--t-fs-13); margin: 0 0 20px; }
 
 /* tables */
@@ -554,7 +558,7 @@ footer .synthetic {
       <path class="door-glow" d="M10 27 v-9 a6 6 0 0 1 12 0 v9 z" />
     </svg>
     <h1 class="wordmark">tambo</h1>
-    <span class="tag">The waystation for your models<br>design language — rebrand of llama-desk</span>
+    <span class="tag">The waystation for your models<br>design language for the llama-desk rebrand</span>
     <span class="spacer"></span>
     <span class="chip">v1 · 2026-11</span>
     <button class="theme-toggle" id="themeToggle" aria-label="Switch color theme">
@@ -571,9 +575,9 @@ footer .synthetic {
     <h1>A sturdier shelter for <em>llama.cpp</em>.</h1>
     <p>Tambo is the rebrand of llama-desk: the same single Go binary that queues GGUFs,
        supervises <code class="mono">llama-server</code> processes, and routes OpenAI-compatible
-       traffic — now with a visual identity that says what it is. An inn on the road between
+       traffic, now with a visual identity that says what it is. An inn on the road between
        your models and their callers.</p>
-    <p>The language is deliberately ordinary where ordinary wins — tables, forms, logs — and
+    <p>The language is deliberately ordinary where ordinary wins (tables, forms, logs) and
        committed where it counts: one madder-orange accent, a warm brown-black dye ground,
        corners that stay hard, and status you can read at a glance from across the room.</p>
   </div>
@@ -583,15 +587,15 @@ footer .synthetic {
 <section id="color">
   <div class="wrap">
     <h2><span class="num">01</span> Color</h2>
-    <p class="section-lede">Five dye lots and a warm gray. Dark is primary — the panel lives next to a
+    <p class="section-lede">Five dye lots and a warm gray. Dark is primary: the panel lives next to a
       terminal, not in a sunlit office. Click any chip to copy its hex.</p>
 
-    <h3>Ground &amp; ink — dark</h3>
+    <h3>Ground &amp; ink, dark</h3>
     <div class="ramp" data-ramp="dark"></div>
 
-    <h3>Madder — the accent ramp</h3>
+    <h3>Madder, the accent ramp</h3>
     <p class="section-lede" style="margin-bottom:16px">One accent, spent sparingly. It marks the thing
-      that is live, current, or yours to press — never decoration.</p>
+      that is live, current, or yours to press, never decoration.</p>
     <div class="ramp" data-ramp="madder"></div>
 
     <h3>Semantic status</h3>
@@ -604,8 +608,8 @@ footer .synthetic {
         <span><span class="name">Error / Destructive</span><span class="use">#D64556 · failed, delete</span></span></button>
       <button class="semantic" data-hex="#7A9CD8"><span class="dot" style="background:#7a9cd8"></span>
         <span><span class="name">Downloading / Info</span><span class="use">#7A9CD8 · in flight</span></span></button>
-      <button class="semantic" data-hex="#8A7A68"><span class="dot" style="background:#8a7a68"></span>
-        <span><span class="name">Stopped / Idle</span><span class="use">#8A7A68 · present, inactive</span></span></button>
+      <button class="semantic" data-hex="#A8977F"><span class="dot" style="background:#a8977f"></span>
+        <span><span class="name">Stopped / Idle</span><span class="use">#A8977F · present, inactive</span></span></button>
       <button class="semantic" data-hex="#E2622C"><span class="dot" style="background:#e2622c"></span>
         <span><span class="name">Madder 500 · brand</span><span class="use">#E2622C · primary actions</span></span></button>
     </div>
@@ -617,7 +621,7 @@ footer .synthetic {
   <div class="wrap">
     <h2><span class="num">02</span> Type</h2>
     <p class="section-lede">Inter for everything you read and press; JetBrains Mono for everything
-      a machine emitted — filenames, ports, argument vectors, byte counts. Mono is a data signal,
+      a machine emitted: filenames, ports, argument vectors, byte counts. Mono is a data signal,
       never a style.</p>
 
     <div class="type-row"><span class="spec">Display / 40 / 800 / -0.03em</span>
@@ -644,7 +648,7 @@ footer .synthetic {
     <h2><span class="num">03</span> Shape &amp; depth</h2>
     <p class="section-lede">No soft pillows. The corner ceiling is 4&nbsp;px on controls and 6&nbsp;px on
       surfaces; status squares keep a hard edge, echoing the doorway of the mark. Depth comes from
-      real shadows — offset and blurred — never from glows around idle things.</p>
+      real shadows (offset and blurred), never from glows around idle things.</p>
 
     <div class="shape-grid">
       <div class="shape-cell"><div class="demo" style="border-radius:0"></div><div class="name">r-0 · 0px</div><div class="note">status squares, table cells</div></div>
@@ -689,7 +693,7 @@ footer .synthetic {
       <div class="field">
         <label for="i1">Hugging Face repo</label>
         <input class="input" id="i1" type="text" value="bartowski/Qwen2.5-14B-Instruct-GGUF">
-        <div class="hint">Public repos only — the panel holds no HF credentials.</div>
+        <div class="hint">Public repos only: the panel holds no HF credentials.</div>
       </div>
       <div class="field field-error">
         <label for="i2">Port</label>
@@ -702,7 +706,7 @@ footer .synthetic {
         <div class="hint">Passed to the child as <code class="mono">--alias</code>; your LiteLLM route stays fixed.</div>
       </div>
       <div class="field">
-        <label for="i4">Extra arguments — one per line, no shell</label>
+        <label for="i4">Extra arguments, one per line, no shell</label>
         <textarea class="textarea" id="i4" rows="3">--flash-attn
 --mlock</textarea>
       </div>
@@ -731,7 +735,7 @@ footer .synthetic {
     <div class="callout">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>
       <p><strong>This panel deletes models and runs your runtime.</strong> It ships without
-        authentication on purpose — access control belongs to your Pangolin policy, not to a
+        authentication on purpose: access control belongs to your Pangolin policy, not to a
         second login nobody trusts.</p>
     </div>
   </div>
@@ -770,7 +774,7 @@ footer .synthetic {
         <div style="min-width:0">
           <!-- Downloads -->
           <div class="pane" id="p-dl" hidden role="tabpanel">
-            <h4>Downloads</h4>
+            <h3>Downloads</h3>
             <p class="pane-lede">Queued by repo and exact filename. Two transfers run at once.</p>
             <div class="dl-row">
               <div class="dl-main">
@@ -809,7 +813,7 @@ footer .synthetic {
 
           <!-- Models -->
           <div class="pane" id="p-models" hidden role="tabpanel">
-            <h4>Models</h4>
+            <h3>Models</h3>
             <p class="pane-lede">The directory is the inventory. Nothing is hidden, nothing is implied.</p>
             <table class="table">
               <thead><tr><th>File</th><th>Size</th><th>Modified</th><th style="text-align:right">Actions</th></tr></thead>
@@ -829,8 +833,8 @@ footer .synthetic {
 
           <!-- Servers -->
           <div class="pane" id="p-servers" role="tabpanel">
-            <h4>Servers</h4>
-            <p class="pane-lede">Your binary, your arguments — exactly as launched.</p>
+            <h3>Servers</h3>
+            <p class="pane-lede">Your binary, your arguments, exactly as launched.</p>
 
             <div class="srv">
               <div class="srv-head">
@@ -847,9 +851,9 @@ footer .synthetic {
 <span class="t">18:41:02.107</span> registering: 1 of 1 tokens<br>
 <span class="t">18:41:03.884</span> kv_self.n = 8192 · kv size MB = 612<br>
 <span class="t">18:41:04.220</span> <span class="ok">server listening on 127.0.0.1:8081</span><br>
-<span class="t">18:42:11.033</span> POST /v1/chat/completions — qwen-main — 142 tok/s<br>
-<span class="t">18:43:57.911</span> <span class="w">slot n_keep = 0 — prompt context compressed</span><br>
-<span class="t">18:44:02.507</span> POST /v1/chat/completions — qwen-main — 138 tok/s
+<span class="t">18:42:11.033</span> POST /v1/chat/completions · qwen-main · 142 tok/s<br>
+<span class="t">18:43:57.911</span> <span class="w">slot n_keep = 0 · prompt context compressed</span><br>
+<span class="t">18:44:02.507</span> POST /v1/chat/completions · qwen-main · 138 tok/s
               </div>
             </div>
 
@@ -866,7 +870,7 @@ footer .synthetic {
 
           <!-- Gateway -->
           <div class="pane" id="p-gw" hidden role="tabpanel">
-            <h4>Gateway</h4>
+            <h3>Gateway</h3>
             <p class="pane-lede">OpenAI-compatible traffic, routed by the request's model field.</p>
             <div style="display:grid;gap:14px;max-width:620px">
               <div class="route"><span class="method">GET</span> /v1/models <span class="arrow">→</span> live inventory <span class="badge badge-ok">2 served</span></div>
@@ -891,14 +895,14 @@ footer .synthetic {
   <div class="wrap">
     <h2><span class="num">06</span> Motion</h2>
     <p class="section-lede">One authored moment: the doorway in the mark lights when the panel
-      opens — a tambo with the lamp on. Everything else moves once, quickly, and stops.
+      opens: a tambo with the lamp on. Everything else moves once, quickly, and stops.
       Hover the tracks.</p>
     <div class="motion-row"><div class="motion-demo md-fast"><i></i></div>
-      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-fast · 120ms — hover, press, color</span></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-fast · 120ms · hover, press, color</span></div>
     <div class="motion-row"><div class="motion-demo md-med"><i></i></div>
-      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-med · 200ms — theme, toggle, toast</span></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-med · 200ms · theme, toggle, toast</span></div>
     <div class="motion-row"><div class="motion-demo md-slow"><i></i></div>
-      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-slow · 320ms — progress, pane crossfade</span></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-slow · 320ms · progress, pane crossfade</span></div>
     <p style="color:var(--t-text-2);font-size:var(--t-fs-14);max-width:46rem;margin-top:18px">All easing is
       <code class="mono">cubic-bezier(0.16, 1, 0.3, 1)</code>: fast out, settle soft. Nothing bounces,
       nothing parallaxes, and <code class="mono">prefers-reduced-motion</code> stills every loop.</p>
@@ -909,7 +913,7 @@ footer .synthetic {
 <section id="tokens">
   <div class="wrap">
     <h2><span class="num">07</span> Token index</h2>
-    <p class="section-lede">Every value on this sheet resolves to one of these custom properties —
+    <p class="section-lede">Every value on this sheet resolves to one of these custom properties:
       the same block ships into the app's stylesheet.</p>
     <div style="overflow-x:auto">
       <table class="tokens">
@@ -922,11 +926,13 @@ footer .synthetic {
           <tr><td>--t-line</td><td>#362D24</td><td>#DDD0BD</td><td>borders</td></tr>
           <tr><td>--t-text</td><td>#F0E9DF</td><td>#241B12</td><td>primary text</td></tr>
           <tr><td>--t-text-2</td><td>#B5A897</td><td>#5D5041</td><td>secondary text</td></tr>
-          <tr><td>--t-accent</td><td>#E2622C</td><td>#C94E1E</td><td>madder · primary action</td></tr>
+          <tr><td>--t-accent</td><td>#E2622C</td><td>#B8451A</td><td>madder · primary action</td></tr>
           <tr><td>--t-accent-ink</td><td>#F0854F</td><td>#A53D18</td><td>accent as text</td></tr>
           <tr><td>--t-ok</td><td>#4AC08A</td><td>#177A52</td><td>running, stored</td></tr>
           <tr><td>--t-warn</td><td>#E6B33F</td><td>#8F6A12</td><td>launching, caution</td></tr>
           <tr><td>--t-bad</td><td>#D64556</td><td>#B32A3D</td><td>error, destructive</td></tr>
+          <tr><td>--t-bad-text</td><td>#E86A76</td><td>#B32A3D</td><td>danger as text</td></tr>
+          <tr><td>--t-bad-strong</td><td>#B52F3C</td><td>#9C2133</td><td>filled destructive</td></tr>
           <tr><td>--t-info</td><td>#7A9CD8</td><td>#3A5E9E</td><td>in flight</td></tr>
           <tr><td>--t-r-2</td><td colspan="2">4px</td><td>controls corner</td></tr>
           <tr><td>--t-t-med</td><td colspan="2">200ms</td><td>default transition</td></tr>
@@ -939,8 +945,8 @@ footer .synthetic {
 
 <footer>
   <div class="wrap">
-    <span class="synthetic">sample data — synthetic</span><br>
-    tambo · the waystation for your models — design language v1 for the rebrand of llama-desk.
+    <span class="synthetic">sample data · synthetic</span><br>
+    tambo · the waystation for your models. Design language v1 for the rebrand of llama-desk.
     MIT © 2026 Emil Kelhala. One binary, no database, your machine, your build.
   </div>
 </footer>
@@ -970,7 +976,7 @@ function showToast(msg) {
 // color ramps
 const darkRamp = [
   ['bg','#14100C'],['bg-deep','#0F0C09'],['panel','#1A1511'],['panel-2','#211B15'],
-  ['raised','#29221B'],['line','#362D24'],['line-soft','#2A231C'],['text-3','#8A7A68'],
+  ['raised','#29221B'],['line','#362D24'],['line-soft','#2A231C'],['text-3','#A8977F'],
   ['text-2','#B5A897'],['text','#F0E9DF']
 ];
 const madderRamp = [
