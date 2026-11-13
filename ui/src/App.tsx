@@ -23,7 +23,7 @@ import { Separator } from '@/components/ui/separator'
 import { Toaster } from '@/components/ui/sonner'
 import { api, type ModelFile, type Run, type State } from '@/lib/api'
 import { bytes } from '@/lib/format'
-import { navigate, useHashRoute } from '@/lib/router'
+import { useHashRoute } from '@/lib/router'
 import { DashboardView, type History } from '@/views/dashboard'
 import { DownloadsView } from '@/views/downloads'
 import { FilesView } from '@/views/files'
@@ -99,7 +99,6 @@ export default function App() {
   )
 
   const data = state ?? EMPTY_STATE
-  const running = data.runs.filter((r) => r.status === 'running' || r.status === 'stopping')
   const detailRun: Run | undefined = route.view === 'server' ? data.runs.find((r) => r.id === route.id) : undefined
 
   const [title, subtitle] =
@@ -110,19 +109,16 @@ export default function App() {
       : TITLES[route.view]
 
   return (
-    <div className="flex min-h-dvh flex-col md:flex-row">
+    <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
       <NavRail active={route.view} connected={connected} />
 
-      <div className="flex min-w-0 grow flex-col">
-        <header className="bg-background/70 sticky top-0 z-30 flex min-h-14 items-center gap-3.5 border-b px-4 backdrop-blur sm:px-6">
+      <div className="flex min-h-0 min-w-0 grow flex-col">
+        <header className="bg-background flex min-h-14 shrink-0 items-center gap-3.5 border-b px-4 sm:px-6">
           <div className="min-w-0">
             <h1 className="truncate text-[15px] font-semibold tracking-tight">{title}</h1>
             <p className="text-muted-foreground mt-px hidden truncate text-xs sm:block">{subtitle}</p>
           </div>
           <span className="grow" />
-          <span className="bg-secondary rounded-md border px-2 py-1 font-mono text-xs text-muted-foreground max-sm:hidden">
-            /v1 · {running.length} {running.length === 1 ? 'model' : 'models'} live
-          </span>
           <Button
             variant="ghost"
             size="icon"
@@ -139,8 +135,8 @@ export default function App() {
           </Button>
         </header>
 
-        <main className="grow px-4 pt-5 pb-24 sm:px-6 md:pb-12">
-          <div className="mx-auto grid w-full max-w-6xl content-start gap-3.5">
+        <main className="min-h-0 grow overflow-y-auto px-4 pt-5 pb-24 sm:px-6 md:pb-6">
+          <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col">
             {state ? (
               <>
                 {route.view === 'dashboard' && <DashboardView state={data} history={history} />}
@@ -169,21 +165,6 @@ export default function App() {
                 {connected ? 'Loading…' : 'Cannot reach the llama-desk API. Is the manager running?'}
               </p>
             )}
-
-            <footer className="text-muted-foreground mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
-              {state && (
-                <>
-                  <span>models {state.settings.models}</span>
-                  <span>binary {state.settings.binary}</span>
-                  <span>
-                    {state.models.length} files · {bytes(data.models.reduce((s, m) => s + m.size, 0))}
-                  </span>
-                  <button className="underline-offset-2 hover:underline" onClick={() => navigate('files')}>
-                    inventory
-                  </button>
-                </>
-              )}
-            </footer>
           </div>
         </main>
       </div>

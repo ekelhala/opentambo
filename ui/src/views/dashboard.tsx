@@ -3,7 +3,6 @@ import { Donut, type DonutSegment } from '@/components/donut'
 import { MeterRow } from '@/components/meter'
 import { AreaChart, BarChart, Sparkline } from '@/components/sparkline'
 import { ServerRow } from '@/views/servers'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { bytes } from '@/lib/format'
@@ -51,7 +50,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         : `peak ${peak} jobs`
 
   return (
-    <div className="grid gap-3.5">
+    <div className="flex flex-1 flex-col gap-3.5">
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Stat
           label="Active servers"
@@ -92,105 +91,105 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         />
       </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex-row items-center">
-            <CardTitle>Activity</CardTitle>
-            <span className="ml-auto flex gap-0.5 rounded-lg border bg-secondary p-0.5">
-              {CHIPS.map((chip) => (
-                <button
-                  key={chip.id}
-                  onClick={() => setSeries(chip.id)}
-                  aria-pressed={series === chip.id}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    series === chip.id
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </span>
-          </CardHeader>
-          <CardContent>
-            {series === 'jobs' ? (
-              <BarChart values={history.jobs} height={190} />
-            ) : series === 'running' ? (
-              <AreaChart values={history.running} height={190} className="text-emerald-500" />
-            ) : (
-              <AreaChart values={history.bandwidth} height={190} className="text-sky-500" />
-            )}
-            <div className="text-muted-foreground mt-2.5 flex justify-end font-mono text-xs">
-              {values.length > 1 ? peakLabel : 'collecting samples…'}
-            </div>
-          </CardContent>
-        </Card>
-        <div className="grid content-start gap-3.5">
+      <div className="grid flex-1 content-start gap-3.5 lg:grid-rows-[auto_1fr]">
+        <div className="grid gap-3.5 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex-row items-center">
-              <CardTitle>Model storage</CardTitle>
-              <span className="text-muted-foreground ml-auto text-xs font-normal normal-case tracking-normal">
-                {state.models.length} files
+              <CardTitle>Activity</CardTitle>
+              <span className="ml-auto flex gap-0.5 rounded-lg border bg-secondary p-0.5">
+                {CHIPS.map((chip) => (
+                  <button
+                    key={chip.id}
+                    onClick={() => setSeries(chip.id)}
+                    aria-pressed={series === chip.id}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                      series === chip.id
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
               </span>
             </CardHeader>
             <CardContent>
-              {disk > 0 ? (
-                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center lg:flex-col xl:flex-row">
-                  <Donut
-                    segments={diskSegments(state)}
-                    centerValue={bytes(disk).replace(/ \w+$/, '')}
-                    centerLabel={bytes(disk).split(' ')[1]}
-                    size={124}
-                  />
-                  <div className="grid w-full gap-2 text-xs">
-                    {diskSegments(state).map((s) => (
-                      <div key={s.label} className="text-muted-foreground flex items-center gap-2">
-                        <span className="size-2 shrink-0 rounded-sm" style={{ background: s.color }} />
-                        <span className="truncate">{s.label}</span>
-                        <span className="text-foreground ml-auto shrink-0 tabular-nums">{bytes(s.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {series === 'jobs' ? (
+                <BarChart values={history.jobs} height={190} />
+              ) : series === 'running' ? (
+                <AreaChart values={history.running} height={190} className="text-emerald-500" />
               ) : (
-                <p className="text-muted-foreground py-6 text-center text-sm">No models on disk yet.</p>
+                <AreaChart values={history.bandwidth} height={190} className="text-sky-500" />
               )}
+              <div className="text-muted-foreground mt-2.5 flex justify-end font-mono text-xs">
+                {values.length > 1 ? peakLabel : 'collecting samples…'}
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Manager</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MeterRow
-                label="Servers"
-                value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
-                detail={`${running.length} / ${state.runs.length}`}
-              />
-              <MeterRow
-                label="Downloads"
-                value={
-                  state.settings.parallel_downloads
-                    ? (downloading.length / state.settings.parallel_downloads) * 100
-                    : 0
-                }
-                detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
-                className="bg-sky-500"
-              />
-              <MeterRow
-                label="Jobs open"
-                value={state.jobs.length ? (activeJobs.length / state.jobs.length) * 100 : 0}
-                detail={`${activeJobs.length} / ${state.jobs.length}`}
-                className="bg-amber-500"
-              />
-            </CardContent>
-          </Card>
+          <div className="grid content-start gap-3.5">
+            <Card>
+              <CardHeader className="flex-row items-center">
+                <CardTitle>Model storage</CardTitle>
+                <span className="text-muted-foreground ml-auto text-xs font-normal normal-case tracking-normal">
+                  {state.models.length} files
+                </span>
+              </CardHeader>
+              <CardContent>
+                {disk > 0 ? (
+                  <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center lg:flex-col xl:flex-row">
+                    <Donut
+                      segments={diskSegments(state)}
+                      centerValue={bytes(disk).replace(/ \w+$/, '')}
+                      centerLabel={bytes(disk).split(' ')[1]}
+                      size={124}
+                    />
+                    <div className="grid w-full gap-2 text-xs">
+                      {diskSegments(state).map((s) => (
+                        <div key={s.label} className="text-muted-foreground flex items-center gap-2">
+                          <span className="size-2 shrink-0 rounded-sm" style={{ background: s.color }} />
+                          <span className="truncate">{s.label}</span>
+                          <span className="text-foreground ml-auto shrink-0 tabular-nums">{bytes(s.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground py-6 text-center text-sm">No models on disk yet.</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Manager</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MeterRow
+                  label="Servers"
+                  value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
+                  detail={`${running.length} / ${state.runs.length}`}
+                />
+                <MeterRow
+                  label="Downloads"
+                  value={
+                    state.settings.parallel_downloads
+                      ? (downloading.length / state.settings.parallel_downloads) * 100
+                      : 0
+                  }
+                  detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
+                  className="bg-sky-500"
+                />
+                <MeterRow
+                  label="Jobs open"
+                  value={state.jobs.length ? (activeJobs.length / state.jobs.length) * 100 : 0}
+                  detail={`${activeJobs.length} / ${state.jobs.length}`}
+                  className="bg-amber-500"
+                />
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-3">
-        <div className="grid content-start gap-2.5 lg:col-span-2">
+        <div className="grid content-start gap-2.5">
           <div className="flex items-center gap-2">
             <h2 className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
               Active servers
@@ -208,31 +207,6 @@ export function DashboardView({ state, history }: { state: State; history: Histo
             </p>
           )}
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Gateway</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-2.5 text-[12.5px]">
-              One OpenAI-compatible entry point. LiteLLM keeps owning keys and policies; aliases stay
-              stable across ports.
-            </p>
-            <pre className="bg-muted overflow-x-auto rounded-md p-2.5 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-              {`POST /v1/chat/completions\n` +
-                (running.length
-                  ? running.map((r) => `  "model": "${r.launch.name}"  → 127.0.0.1:${r.launch.port}`).join('\n')
-                  : '  (no aliases live)')}
-            </pre>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                GET /v1/models
-              </Badge>
-              <Badge variant="outline">chat · completions</Badge>
-              <Badge variant="outline">embeddings</Badge>
-              <Badge variant="outline">responses</Badge>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
