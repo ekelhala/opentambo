@@ -17,8 +17,11 @@ ui: ui/node_modules
 ui/node_modules: ui/package.json ui/bun.lock
 	cd ui && bun install --frozen-lockfile
 
-## dev: Vite dev server, proxying /api and /v1 to a local llama-desk on 127.0.0.1:8090
+## dev: run the backend on 127.0.0.1:8090 plus the Vite dev server proxying /api and /v1 to it
 dev: ui/node_modules
+	CGO_ENABLED=0 go run ./cmd/$(BINARY) & \
+	BACKEND=$$!; \
+	trap 'kill $$BACKEND 2>/dev/null' EXIT; \
 	cd ui && bun run dev
 
 ## test: Go tests
