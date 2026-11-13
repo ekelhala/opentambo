@@ -2,6 +2,12 @@ BINARY  := llama-desk
 BIN_DIR := bin
 WEB_DIR := internal/desk/web
 
+# Local overrides (see .env.example), e.g. LLAMA_DESK_LISTEN=127.0.0.1:8091
+# when the default port is taken. Exported so both the Go backend and the
+# Vite dev server pick them up.
+-include .env
+export LLAMA_DESK_LISTEN
+
 .PHONY: all build ui dev test clean
 
 all: build

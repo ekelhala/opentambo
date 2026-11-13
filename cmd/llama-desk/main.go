@@ -14,7 +14,11 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", "127.0.0.1:8090", "HTTP listen address")
+	defaultListen := os.Getenv("LLAMA_DESK_LISTEN")
+	if defaultListen == "" {
+		defaultListen = "127.0.0.1:8090"
+	}
+	listen := flag.String("listen", defaultListen, "HTTP listen address (env LLAMA_DESK_LISTEN)")
 	models := flag.String("models", "./models", "model directory")
 	binary := flag.String("llama-server", "llama-server", "native llama-server executable")
 	data := flag.String("data", "./data", "job history and launch settings directory")
