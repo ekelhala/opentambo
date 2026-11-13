@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tambo — design language</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   tambo — design language tokens
+   The waystation for your models.
+   Dark is primary: a terminal-adjacent operator, dim room,
+   rack fan running. Light is the daylight rendition of the
+   same dye lots.
+   ============================================================ */
+
+:root {
+  /* corner language — angular, not pillowy.
+     4px is the ceiling on controls, 6px on surfaces. */
+  --t-r-0: 0px;
+  --t-r-1: 2px;
+  --t-r-2: 4px;
+  --t-r-3: 6px;
+  --t-r-pill: 999px;   /* reserved: toggle tracks only */
+
+  /* motion */
+  --t-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-t-fast: 120ms;
+  --t-t-med: 200ms;
+  --t-t-slow: 320ms;
+
+  /* type */
+  --t-font-ui: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --t-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --t-fs-12: 0.75rem;
+  --t-fs-13: 0.8125rem;
+  --t-fs-14: 0.875rem;
+  --t-fs-16: 1rem;
+  --t-fs-20: 1.25rem;
+  --t-fs-24: 1.5rem;
+  --t-fs-32: 2rem;
+  --t-fs-40: 2.5rem;
+}
+
+/* ---------- dye lots: dark (primary) ---------- */
+html[data-theme="dark"] {
+  --t-bg:        #14100c;   /* undyed alpaca, near-black brown */
+  --t-bg-deep:   #0f0c09;   /* console, recessed wells        */
+  --t-panel:     #1a1511;
+  --t-panel-2:   #211b15;
+  --t-raised:    #29221b;
+  --t-line:      #362d24;
+  --t-line-soft: #2a231c;
+
+  --t-text:      #f0e9df;
+  --t-text-2:    #b5a897;
+  --t-text-3:    #8a7a68;
+
+  --t-accent:      #e2622c;  /* madder, core 500 */
+  --t-accent-hover:#c94e1e;
+  --t-accent-press:#a53d18;
+  --t-accent-text: #f4ede3;  /* text on accent  — 5.2:1 */
+  --t-accent-ink:  #f0854f;  /* accent as text on dark  — 5.1:1 */
+  --t-accent-soft: rgba(226, 98, 44, 0.14);
+  --t-accent-line: rgba(226, 98, 44, 0.42);
+
+  --t-ok:    #4ac08a;  --t-ok-soft:  rgba(74, 192, 138, 0.13);
+  --t-warn:  #e6b33f;  --t-warn-soft:rgba(230, 179, 63, 0.13);
+  --t-bad:   #d64556;  --t-bad-soft: rgba(214, 69, 86, 0.14);
+  --t-info:  #7a9cd8;  --t-info-soft:rgba(122, 156, 216, 0.13);
+
+  --t-shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
+  --t-shadow-2: 0 2px 4px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.45);
+  --t-glow:     0 0 0 1px var(--t-accent-line), 0 2px 14px rgba(226,98,44,.25);
+  --t-scrim:    rgba(15, 12, 9, 0.72);
+}
+
+/* ---------- dye lots: light (secondary) ---------- */
+html[data-theme="light"] {
+  --t-bg:        #f4eee5;
+  --t-bg-deep:   #221b14;
+  --t-panel:     #fdfaf4;
+  --t-panel-2:   #f0e8db;
+  --t-raised:    #e9dfd0;
+  --t-line:      #ddd0bd;
+  --t-line-soft: #e8ddcc;
+
+  --t-text:      #241b12;
+  --t-text-2:    #5d5041;
+  --t-text-3:    #7d6e5c;
+
+  --t-accent:      #c94e1e;
+  --t-accent-hover:#a53d18;
+  --t-accent-press:#833117;
+  --t-accent-text: #fdf1ea;
+  --t-accent-ink:  #a53d18;
+  --t-accent-soft: rgba(201, 78, 30, 0.10);
+  --t-accent-line: rgba(201, 78, 30, 0.45);
+
+  --t-ok:    #177a52;  --t-ok-soft:  rgba(23, 122, 82, 0.10);
+  --t-warn:  #8f6a12;  --t-warn-soft:rgba(143, 106, 18, 0.12);
+  --t-bad:   #b32a3d;  --t-bad-soft: rgba(179, 42, 61, 0.10);
+  --t-info:  #3a5e9e;  --t-info-soft:rgba(58, 94, 158, 0.10);
+
+  --t-shadow-1: 0 1px 2px rgba(60,40,20,.10), 0 2px 8px rgba(60,40,20,.07);
+  --t-shadow-2: 0 2px 4px rgba(60,40,20,.10), 0 10px 28px rgba(60,40,20,.13);
+  --t-glow:     0 0 0 1px var(--t-accent-line), 0 2px 12px rgba(201,78,30,.18);
+  --t-scrim:    rgba(244, 238, 229, 0.78);
+}
+
+/* ============================================================ base */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--t-bg);
+  color: var(--t-text);
+  font: 400 15px/1.6 var(--t-font-ui);
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--t-t-med) var(--t-ease), color var(--t-t-med) var(--t-ease);
+}
+
+::selection { background: var(--t-accent-soft); color: var(--t-text); }
+input, textarea { caret-color: var(--t-accent); }
+* { scrollbar-width: thin; scrollbar-color: var(--t-line) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--t-line); border: 3px solid var(--t-bg); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+a { color: var(--t-accent-ink); text-underline-offset: 3px; }
+code, .mono { font-family: var(--t-font-mono); }
+
+:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 2px;
+}
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+/* ============================================================ header */
+.masthead {
+  border-bottom: 1px solid var(--t-line);
+  background: var(--t-panel);
+  position: sticky; top: 0; z-index: 40;
+}
+.masthead .wrap {
+  display: flex; align-items: center; gap: 14px;
+  height: 60px;
+}
+.mark { width: 30px; height: 30px; flex: none; display: block; }
+.mark .door-frame { fill: var(--t-raised); stroke: var(--t-line); stroke-width: 1; }
+.mark .door-glow  { fill: var(--t-accent); opacity: 0.16; }
+.mark.lit .door-glow { animation: door 1.6s var(--t-ease) forwards; }
+@keyframes door {
+  0%   { opacity: 0; }
+  35%  { opacity: 0.95; }
+  100% { opacity: 0.55; }
+}
+.wordmark {
+  font-weight: 800; font-size: 20px; letter-spacing: -0.02em;
+  margin: 0; line-height: 1;
+}
+.masthead .tag {
+  font-size: var(--t-fs-13); color: var(--t-text-3);
+  border-left: 1px solid var(--t-line); padding-left: 14px;
+  align-self: center; line-height: 1.3;
+}
+.masthead .spacer { flex: 1; }
+.chip {
+  font: 500 var(--t-fs-12)/1 var(--t-font-mono);
+  color: var(--t-text-2); background: var(--t-panel-2);
+  border: 1px solid var(--t-line); border-radius: var(--t-r-1);
+  padding: 5px 8px; white-space: nowrap;
+}
+@media (max-width: 720px) { .masthead .tag, .masthead .chip { display: none; } }
+
+/* theme toggle */
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--t-panel-2); border: 1px solid var(--t-line);
+  border-radius: var(--t-r-2); padding: 6px 10px;
+  color: var(--t-text-2); font: 500 var(--t-fs-13)/1 var(--t-font-ui);
+  cursor: pointer; transition: border-color var(--t-t-fast), color var(--t-t-fast);
+}
+.theme-toggle:hover { border-color: var(--t-accent-line); color: var(--t-text); }
+.theme-toggle svg { width: 15px; height: 15px; }
+.theme-toggle .only-light { display: none; }
+html[data-theme="light"] .theme-toggle .only-light { display: inline; }
+html[data-theme="light"] .theme-toggle .only-dark { display: none; }
+
+/* ============================================================ intro */
+.intro { padding: 56px 0 40px; max-width: 46rem; }
+.intro h1 {
+  font-size: var(--t-fs-40); font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.08; margin: 0 0 16px; text-wrap: balance;
+}
+.intro h1 em { font-style: normal; color: var(--t-accent-ink); }
+.intro p { color: var(--t-text-2); font-size: var(--t-fs-16); margin: 0 0 12px; }
+
+/* ============================================================ sections */
+section { padding: 48px 0; border-top: 1px solid var(--t-line); }
+section > .wrap > h2 {
+  font-size: var(--t-fs-24); font-weight: 700; letter-spacing: -0.02em;
+  margin: 0 0 6px; display: flex; align-items: baseline; gap: 12px;
+}
+h2 .num {
+  font: 600 var(--t-fs-13)/1 var(--t-font-mono); color: var(--t-accent-ink);
+}
+.section-lede { color: var(--t-text-2); max-width: 46rem; margin: 0 0 28px; }
+h3 { font-size: var(--t-fs-16); font-weight: 600; letter-spacing: -0.01em; margin: 32px 0 12px; }
+
+/* ============================================================ swatches */
+.ramp { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+@media (max-width: 860px) { .ramp { grid-template-columns: repeat(5, 1fr); } }
+.swatch {
+  border: 1px solid var(--t-line); border-radius: var(--t-r-1);
+  overflow: hidden; cursor: pointer; background: none; padding: 0;
+  text-align: left; color: inherit; font: inherit;
+  transition: transform var(--t-t-fast) var(--t-ease), box-shadow var(--t-t-fast);
+}
+.swatch:hover { transform: translateY(-2px); box-shadow: var(--t-shadow-1); }
+.swatch .fill { height: 64px; }
+.swatch .meta { padding: 6px 8px 8px; background: var(--t-panel); }
+.swatch .name { font: 600 var(--t-fs-12)/1.3 var(--t-font-ui); display: block; }
+.swatch .hex  { font: 400 11px/1.4 var(--t-font-mono); color: var(--t-text-3); }
+
+.semantic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.semantic {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--t-line); border-radius: var(--t-r-2);
+  background: var(--t-panel); padding: 12px 14px; cursor: pointer;
+  transition: border-color var(--t-t-fast);
+}
+.semantic:hover { border-color: var(--t-accent-line); }
+.semantic .dot { width: 34px; height: 34px; border-radius: var(--t-r-1); flex: none; }
+.semantic .name { font: 600 var(--t-fs-13)/1.3 var(--t-font-ui); display: block; }
+.semantic .use  { font: 400 11px/1.4 var(--t-font-mono); color: var(--t-text-3); }
+
+/* ============================================================ type specimens */
+.type-row {
+  display: grid; grid-template-columns: 150px 1fr; gap: 20px;
+  padding: 18px 0; border-bottom: 1px solid var(--t-line-soft);
+  align-items: baseline;
+}
+.type-row:first-of-type { border-top: 1px solid var(--t-line-soft); }
+.type-row .spec { font: 400 var(--t-fs-12)/1.5 var(--t-font-mono); color: var(--t-text-3); }
+@media (max-width: 640px) { .type-row { grid-template-columns: 1fr; gap: 4px; } }
+
+/* ============================================================ shape & depth */
+.shape-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.shape-cell {
+  border: 1px solid var(--t-line); background: var(--t-panel);
+  border-radius: var(--t-r-2); padding: 14px;
+}
+.shape-cell .demo {
+  height: 60px; background: var(--t-accent-soft);
+  border: 1px solid var(--t-accent-line); margin-bottom: 10px;
+}
+.shape-cell .name { font: 600 var(--t-fs-13)/1 var(--t-font-ui); }
+.shape-cell .note { font: 400 11px/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 3px; }
+
+.depth-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.depth-cell {
+  background: var(--t-panel); border: 1px solid var(--t-line);
+  border-radius: var(--t-r-2); padding: 16px; min-height: 84px;
+}
+.depth-cell .name { font: 600 var(--t-fs-13)/1 var(--t-font-ui); }
+.depth-cell .note { font: 400 11px/1.5 var(--t-font-mono); color: var(--t-text-3); margin-top: 4px; }
+
+/* ============================================================ buttons */
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 16px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 600 var(--t-fs-14)/1 var(--t-font-ui);
+  border-radius: var(--t-r-2); padding: 10px 16px;
+  border: 1px solid transparent; cursor: pointer;
+  transition: background var(--t-t-fast), border-color var(--t-t-fast),
+              color var(--t-t-fast), transform var(--t-t-fast);
+}
+.btn svg { width: 15px; height: 15px; flex: none; }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--t-accent); color: var(--t-accent-text); }
+.btn-primary:hover { background: var(--t-accent-hover); }
+.btn-primary:active { background: var(--t-accent-press); }
+.btn-secondary { background: var(--t-panel-2); color: var(--t-text); border-color: var(--t-line); }
+.btn-secondary:hover { border-color: var(--t-accent-line); background: var(--t-raised); }
+.btn-ghost { background: transparent; color: var(--t-text-2); }
+.btn-ghost:hover { background: var(--t-panel-2); color: var(--t-text); }
+.btn-danger { background: var(--t-bad); color: #fdf1f0; }
+.btn-danger:hover { filter: brightness(1.1); }
+.btn-danger-ghost { background: transparent; color: var(--t-bad); border-color: var(--t-bad); }
+.btn-danger-ghost:hover { background: var(--t-bad-soft); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+.btn-sm { padding: 7px 12px; font-size: var(--t-fs-13); }
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--t-r-2);
+  border: 1px solid var(--t-line); background: var(--t-panel-2);
+  color: var(--t-text-2); cursor: pointer;
+  transition: border-color var(--t-t-fast), color var(--t-t-fast);
+}
+.icon-btn:hover { border-color: var(--t-accent-line); color: var(--t-text); }
+.icon-btn svg { width: 15px; height: 15px; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================ form controls */
+.field { max-width: 360px; margin-bottom: 16px; }
+.field label { display: block; font: 600 var(--t-fs-13)/1 var(--t-font-ui); margin-bottom: 7px; }
+.field .hint { font: 400 var(--t-fs-12)/1.5 var(--t-font-ui); color: var(--t-text-3); margin-top: 6px; }
+.input, .select, .textarea {
+  width: 100%; font: 400 var(--t-fs-14)/1.4 var(--t-font-ui);
+  color: var(--t-text); background: var(--t-bg-deep);
+  border: 1px solid var(--t-line); border-radius: var(--t-r-2);
+  padding: 9px 12px;
+  transition: border-color var(--t-t-fast), box-shadow var(--t-t-fast);
+}
+html[data-theme="light"] .input,
+html[data-theme="light"] .select,
+html[data-theme="light"] .textarea { background: var(--t-panel); }
+.input::placeholder { color: var(--t-text-3); }
+.input:hover, .select:hover, .textarea:hover { border-color: var(--t-text-3); }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px var(--t-accent-soft);
+}
+.field-error .input { border-color: var(--t-bad); }
+.field-error .hint { color: var(--t-bad); }
+.textarea { resize: vertical; font-family: var(--t-font-mono); font-size: var(--t-fs-13); }
+
+.check-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer; font-size: var(--t-fs-14); }
+.checkbox {
+  appearance: none; width: 17px; height: 17px; flex: none; margin: 0;
+  border: 1px solid var(--t-line); border-radius: var(--t-r-1);
+  background: var(--t-bg-deep); cursor: pointer; position: relative;
+  transition: background var(--t-t-fast), border-color var(--t-t-fast);
+}
+html[data-theme="light"] .checkbox { background: var(--t-panel); }
+.checkbox:hover { border-color: var(--t-accent-line); }
+.checkbox:checked { background: var(--t-accent); border-color: var(--t-accent); }
+.checkbox:checked::after {
+  content: ""; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fdf1ea' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E") center/11px no-repeat;
+}
+
+.toggle {
+  appearance: none; width: 38px; height: 21px; flex: none; margin: 0; cursor: pointer;
+  background: var(--t-raised); border: 1px solid var(--t-line); border-radius: var(--t-r-pill);
+  position: relative; transition: background var(--t-t-med) var(--t-ease), border-color var(--t-t-med);
+}
+.toggle::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+  background: var(--t-text-2); border-radius: var(--t-r-pill);
+  transition: transform var(--t-t-med) var(--t-ease), background var(--t-t-med);
+}
+.toggle:checked { background: var(--t-accent); border-color: var(--t-accent); }
+.toggle:checked::after { transform: translateX(17px); background: #fff; }
+
+/* ============================================================ badges & status */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 600 var(--t-fs-12)/1 var(--t-font-ui);
+  padding: 5px 9px; border-radius: var(--t-r-1);
+  border: 1px solid transparent;
+}
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: var(--t-r-0); }
+.badge-ok   { background: var(--t-ok-soft);   color: var(--t-ok);   border-color: color-mix(in srgb, var(--t-ok) 30%, transparent); }
+.badge-ok::before { background: var(--t-ok); }
+.badge-warn { background: var(--t-warn-soft); color: var(--t-warn); border-color: color-mix(in srgb, var(--t-warn) 30%, transparent); }
+.badge-warn::before { background: var(--t-warn); animation: blink 1.6s ease-in-out infinite; }
+.badge-bad  { background: var(--t-bad-soft);  color: var(--t-bad);  border-color: color-mix(in srgb, var(--t-bad) 30%, transparent); }
+.badge-bad::before { background: var(--t-bad); }
+.badge-info { background: var(--t-info-soft); color: var(--t-info); border-color: color-mix(in srgb, var(--t-info) 30%, transparent); }
+.badge-info::before { background: var(--t-info); animation: blink 1.2s ease-in-out infinite; }
+.badge-idle { background: var(--t-panel-2); color: var(--t-text-3); border-color: var(--t-line); }
+.badge-idle::before { background: var(--t-text-3); }
+@keyframes blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .badge-warn::before, .badge-info::before { animation: none; }
+  .mark.lit .door-glow { animation: none; opacity: 0.55; }
+}
+
+/* progress */
+.progress {
+  height: 6px; background: var(--t-raised); border-radius: var(--t-r-1);
+  overflow: hidden; border: 1px solid var(--t-line-soft);
+}
+.progress > i {
+  display: block; height: 100%; background: var(--t-accent);
+  border-radius: var(--t-r-1) 0 0 var(--t-r-1);
+  transition: width var(--t-t-slow) var(--t-ease);
+}
+.progress.ok > i { background: var(--t-ok); }
+.progress.info > i { background: var(--t-info); }
+
+/* ============================================================ tabs */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--t-line); margin-bottom: 20px; overflow-x: auto; }
+.tab {
+  font: 600 var(--t-fs-14)/1 var(--t-font-ui); color: var(--t-text-3);
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 11px 14px; cursor: pointer; margin-bottom: -1px; white-space: nowrap;
+  transition: color var(--t-t-fast), border-color var(--t-t-fast);
+}
+.tab:hover { color: var(--t-text); }
+.tab[aria-selected="true"] { color: var(--t-text); border-bottom-color: var(--t-accent); }
+
+/* ============================================================ callout */
+.callout {
+  display: flex; gap: 12px; padding: 14px 16px;
+  background: var(--t-warn-soft); border: 1px solid color-mix(in srgb, var(--t-warn) 32%, transparent);
+  border-radius: var(--t-r-2); max-width: 46rem;
+}
+.callout svg { width: 18px; height: 18px; flex: none; color: var(--t-warn); margin-top: 1px; }
+.callout strong { color: var(--t-text); }
+.callout p { margin: 0; font-size: var(--t-fs-13); color: var(--t-text-2); }
+
+/* ============================================================ panel preview */
+.preview-frame {
+  border: 1px solid var(--t-line); border-radius: var(--t-r-3);
+  background: var(--t-panel); box-shadow: var(--t-shadow-2);
+  overflow: hidden;
+}
+.preview-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--t-line);
+  background: var(--t-panel-2);
+}
+.preview-bar .mark { width: 18px; height: 18px; }
+.preview-bar .url {
+  font: 400 var(--t-fs-12)/1 var(--t-font-mono); color: var(--t-text-3);
+  background: var(--t-bg-deep); border: 1px solid var(--t-line);
+  border-radius: var(--t-r-1); padding: 5px 9px; flex: 1; max-width: 340px;
+}
+html[data-theme="light"] .preview-bar .url { background: var(--t-panel); }
+.preview-bar .theme-toggle { padding: 5px 9px; }
+
+.preview-body { display: grid; grid-template-columns: 190px 1fr; min-height: 520px; }
+@media (max-width: 800px) { .preview-body { grid-template-columns: 1fr; } .rail { display: none; } }
+.rail { border-right: 1px solid var(--t-line); padding: 14px 10px; background: var(--t-panel-2); }
+.rail .item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  font: 500 var(--t-fs-14)/1 var(--t-font-ui); color: var(--t-text-2);
+  background: none; border: none; border-radius: var(--t-r-2);
+  padding: 9px 12px; cursor: pointer; text-align: left;
+  transition: background var(--t-t-fast), color var(--t-t-fast);
+}
+.rail .item svg { width: 16px; height: 16px; flex: none; }
+.rail .item:hover { background: var(--t-raised); color: var(--t-text); }
+.rail .item[aria-selected="true"] { background: var(--t-accent-soft); color: var(--t-accent-ink); }
+.rail .item .count {
+  margin-left: auto; font: 500 var(--t-fs-12)/1 var(--t-font-mono); color: var(--t-text-3);
+}
+.pane { padding: 22px; }
+.pane[hidden] { display: none; }
+.pane h4 { font-size: var(--t-fs-20); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+.pane .pane-lede { color: var(--t-text-2); font-size: var(--t-fs-13); margin: 0 0 20px; }
+
+/* tables */
+.table { width: 100%; border-collapse: collapse; font-size: var(--t-fs-13); }
+.table th {
+  text-align: left; font: 600 var(--t-fs-12)/1 var(--t-font-ui);
+  color: var(--t-text-3); padding: 0 12px 10px; border-bottom: 1px solid var(--t-line);
+}
+.table td { padding: 12px; border-bottom: 1px solid var(--t-line-soft); vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table .num, .table td.mono-cell { font-family: var(--t-font-mono); font-variant-numeric: tabular-nums; }
+.table tr { transition: background var(--t-t-fast); }
+.table tbody tr:hover { background: var(--t-panel-2); }
+.fname { font-family: var(--t-font-mono); font-size: var(--t-fs-13); word-break: break-all; }
+
+/* server card */
+.srv {
+  border: 1px solid var(--t-line); border-radius: var(--t-r-2);
+  background: var(--t-panel-2); padding: 16px; margin-bottom: 14px;
+}
+.srv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.srv-head .srv-name { font: 600 var(--t-fs-14)/1.2 var(--t-font-ui); }
+.srv-head .srv-meta { font: 400 var(--t-fs-12)/1.2 var(--t-font-mono); color: var(--t-text-3); }
+.srv-head .grow { flex: 1; }
+.argvec {
+  background: var(--t-bg-deep); border: 1px solid var(--t-line); border-radius: var(--t-r-1);
+  font: 400 var(--t-fs-12)/1.7 var(--t-font-mono); color: var(--t-text-2);
+  padding: 10px 12px; overflow-x: auto; white-space: pre; margin: 0 0 12px;
+}
+.argvec .flag { color: var(--t-accent-ink); }
+.console {
+  background: var(--t-bg-deep); border: 1px solid var(--t-line); border-radius: var(--t-r-1);
+  font: 400 var(--t-fs-12)/1.7 var(--t-font-mono); color: var(--t-text-2);
+  padding: 10px 12px; height: 120px; overflow-y: auto;
+}
+.console .t { color: var(--t-text-3); }
+.console .ok { color: var(--t-ok); }
+.console .w { color: var(--t-warn); }
+
+.dl-row { display: grid; grid-template-columns: 1fr 90px 130px 110px 40px; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--t-line-soft); }
+.dl-row:last-child { border-bottom: none; }
+.dl-main .fname { display: block; margin-bottom: 6px; }
+.dl-stats { display: flex; justify-content: space-between; font: 400 var(--t-fs-12)/1 var(--t-font-mono); color: var(--t-text-3); margin-top: 6px; }
+@media (max-width: 720px) { .dl-row { grid-template-columns: 1fr 40px; } .dl-row > :nth-child(2), .dl-row > :nth-child(4) { display: none; } }
+
+.route { display: flex; align-items: center; gap: 8px; font: 400 var(--t-fs-12)/1.5 var(--t-font-mono); color: var(--t-text-2); flex-wrap: wrap; }
+.route .method { font-weight: 600; color: var(--t-text); border: 1px solid var(--t-line); border-radius: var(--t-r-1); padding: 2px 7px; }
+.route .arrow { color: var(--t-accent-ink); }
+
+/* ============================================================ motion doc */
+.motion-row { display: flex; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--t-line-soft); flex-wrap: wrap; }
+.motion-demo { width: 120px; height: 34px; flex: none; position: relative; border: 1px dashed var(--t-line); border-radius: var(--t-r-1); }
+.motion-demo i {
+  position: absolute; top: 5px; left: 5px; width: 22px; height: 22px;
+  background: var(--t-accent); border-radius: var(--t-r-1);
+}
+.motion-demo:hover i { transform: translateX(82px); }
+.md-fast i { transition: transform var(--t-t-fast) var(--t-ease); }
+.md-med  i { transition: transform var(--t-t-med)  var(--t-ease); }
+.md-slow i { transition: transform var(--t-t-slow) var(--t-ease); }
+
+/* ============================================================ token table */
+.tokens { width: 100%; border-collapse: collapse; font-size: var(--t-fs-13); }
+.tokens th { text-align: left; font: 600 var(--t-fs-12)/1 var(--t-font-ui); color: var(--t-text-3); padding: 0 12px 10px; border-bottom: 1px solid var(--t-line); }
+.tokens td { padding: 10px 12px; border-bottom: 1px solid var(--t-line-soft); font-family: var(--t-font-mono); font-size: var(--t-fs-12); }
+.tokens td:first-child { color: var(--t-accent-ink); }
+
+/* ============================================================ footer */
+footer { border-top: 1px solid var(--t-line); padding: 36px 0 56px; color: var(--t-text-3); font-size: var(--t-fs-13); }
+footer .synthetic {
+  display: inline-block; font: 500 var(--t-fs-12)/1 var(--t-font-mono);
+  border: 1px solid var(--t-line); border-radius: var(--t-r-1); padding: 4px 8px; margin-bottom: 12px;
+  color: var(--t-text-2);
+}
+
+/* toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 12px);
+  background: var(--t-raised); color: var(--t-text);
+  border: 1px solid var(--t-accent-line); border-radius: var(--t-r-2);
+  font: 500 var(--t-fs-13)/1 var(--t-font-ui); padding: 10px 16px;
+  box-shadow: var(--t-shadow-2); opacity: 0; pointer-events: none;
+  transition: opacity var(--t-t-med) var(--t-ease), transform var(--t-t-med) var(--t-ease);
+  z-index: 60;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <svg class="mark lit" viewBox="0 0 32 32" aria-hidden="true">
+      <rect class="door-frame" x="1" y="1" width="30" height="30" />
+      <path class="door-glow" d="M10 27 v-9 a6 6 0 0 1 12 0 v9 z" />
+    </svg>
+    <h1 class="wordmark">tambo</h1>
+    <span class="tag">The waystation for your models<br>design language — rebrand of llama-desk</span>
+    <span class="spacer"></span>
+    <span class="chip">v1 · 2026-11</span>
+    <button class="theme-toggle" id="themeToggle" aria-label="Switch color theme">
+      <svg class="only-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="only-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9 6.7 6.7M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>
+      <span class="only-dark">Dark</span><span class="only-light">Light</span>
+    </button>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+  <div class="intro">
+    <h1>A sturdier shelter for <em>llama.cpp</em>.</h1>
+    <p>Tambo is the rebrand of llama-desk: the same single Go binary that queues GGUFs,
+       supervises <code class="mono">llama-server</code> processes, and routes OpenAI-compatible
+       traffic — now with a visual identity that says what it is. An inn on the road between
+       your models and their callers.</p>
+    <p>The language is deliberately ordinary where ordinary wins — tables, forms, logs — and
+       committed where it counts: one madder-orange accent, a warm brown-black dye ground,
+       corners that stay hard, and status you can read at a glance from across the room.</p>
+  </div>
+</div>
+
+<!-- ============ 1 COLOR ============ -->
+<section id="color">
+  <div class="wrap">
+    <h2><span class="num">01</span> Color</h2>
+    <p class="section-lede">Five dye lots and a warm gray. Dark is primary — the panel lives next to a
+      terminal, not in a sunlit office. Click any chip to copy its hex.</p>
+
+    <h3>Ground &amp; ink — dark</h3>
+    <div class="ramp" data-ramp="dark"></div>
+
+    <h3>Madder — the accent ramp</h3>
+    <p class="section-lede" style="margin-bottom:16px">One accent, spent sparingly. It marks the thing
+      that is live, current, or yours to press — never decoration.</p>
+    <div class="ramp" data-ramp="madder"></div>
+
+    <h3>Semantic status</h3>
+    <div class="semantic-grid">
+      <button class="semantic" data-hex="#4AC08A"><span class="dot" style="background:#4ac08a"></span>
+        <span><span class="name">Running / OK</span><span class="use">#4AC08A · serving traffic</span></span></button>
+      <button class="semantic" data-hex="#E6B33F"><span class="dot" style="background:#e6b33f"></span>
+        <span><span class="name">Launching / Warning</span><span class="use">#E6B33F · loading, attention</span></span></button>
+      <button class="semantic" data-hex="#D64556"><span class="dot" style="background:#d64556"></span>
+        <span><span class="name">Error / Destructive</span><span class="use">#D64556 · failed, delete</span></span></button>
+      <button class="semantic" data-hex="#7A9CD8"><span class="dot" style="background:#7a9cd8"></span>
+        <span><span class="name">Downloading / Info</span><span class="use">#7A9CD8 · in flight</span></span></button>
+      <button class="semantic" data-hex="#8A7A68"><span class="dot" style="background:#8a7a68"></span>
+        <span><span class="name">Stopped / Idle</span><span class="use">#8A7A68 · present, inactive</span></span></button>
+      <button class="semantic" data-hex="#E2622C"><span class="dot" style="background:#e2622c"></span>
+        <span><span class="name">Madder 500 · brand</span><span class="use">#E2622C · primary actions</span></span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 TYPE ============ -->
+<section id="type">
+  <div class="wrap">
+    <h2><span class="num">02</span> Type</h2>
+    <p class="section-lede">Inter for everything you read and press; JetBrains Mono for everything
+      a machine emitted — filenames, ports, argument vectors, byte counts. Mono is a data signal,
+      never a style.</p>
+
+    <div class="type-row"><span class="spec">Display / 40 / 800 / -0.03em</span>
+      <span style="font-size:var(--t-fs-40);font-weight:800;letter-spacing:-0.03em;line-height:1.1">Your models. Your server.</span></div>
+    <div class="type-row"><span class="spec">H2 / 24 / 700 / -0.02em</span>
+      <span style="font-size:var(--t-fs-24);font-weight:700;letter-spacing:-0.02em">Servers on this host</span></div>
+    <div class="type-row"><span class="spec">H3 / 16 / 600 / -0.01em</span>
+      <span style="font-size:var(--t-fs-16);font-weight:600">Launch arguments</span></div>
+    <div class="type-row"><span class="spec">Body / 15 / 400 / 1.6</span>
+      <span>Transfers resume where they stopped: a cancelled download keeps its <code class="mono">.part</code> file and revalidates the ETag on the next attempt.</span></div>
+    <div class="type-row"><span class="spec">Caption / 12 / 400 mono</span>
+      <span style="font:400 var(--t-fs-12)/1.6 var(--t-font-mono);color:var(--t-text-3)">GET /v1/chat/completions → model "qwen-main" → 127.0.0.1:8081</span></div>
+
+    <h3>Numerals</h3>
+    <p style="color:var(--t-text-2);font-size:var(--t-fs-14);max-width:46rem">All byte counts, ports, PIDs,
+      and percentages are set in mono with <code class="mono">tabular-nums</code>, so columns of numbers
+      rule up. Example: <span class="mono" style="font-variant-numeric:tabular-nums">4.2&nbsp;GB · 22&nbsp;MB/s · pid&nbsp;31415 · :8081</span></p>
+  </div>
+</section>
+
+<!-- ============ 3 SHAPE ============ -->
+<section id="shape">
+  <div class="wrap">
+    <h2><span class="num">03</span> Shape &amp; depth</h2>
+    <p class="section-lede">No soft pillows. The corner ceiling is 4&nbsp;px on controls and 6&nbsp;px on
+      surfaces; status squares keep a hard edge, echoing the doorway of the mark. Depth comes from
+      real shadows — offset and blurred — never from glows around idle things.</p>
+
+    <div class="shape-grid">
+      <div class="shape-cell"><div class="demo" style="border-radius:0"></div><div class="name">r-0 · 0px</div><div class="note">status squares, table cells</div></div>
+      <div class="shape-cell"><div class="demo" style="border-radius:var(--t-r-1)"></div><div class="name">r-1 · 2px</div><div class="note">badges, swatches, chips</div></div>
+      <div class="shape-cell"><div class="demo" style="border-radius:var(--t-r-2)"></div><div class="name">r-2 · 4px</div><div class="note">buttons, inputs, cards</div></div>
+      <div class="shape-cell"><div class="demo" style="border-radius:var(--t-r-3)"></div><div class="name">r-3 · 6px</div><div class="note">frames, dialogs</div></div>
+    </div>
+
+    <h3>Elevation</h3>
+    <div class="depth-grid">
+      <div class="depth-cell"><div class="name">Flat</div><div class="note">no shadow · list rows, rails</div></div>
+      <div class="depth-cell" style="box-shadow:var(--t-shadow-1)"><div class="name">Raised · shadow-1</div><div class="note">hovered chips, pinned bars</div></div>
+      <div class="depth-cell" style="box-shadow:var(--t-shadow-2)"><div class="name">Lifted · shadow-2</div><div class="note">dialogs, toasts, previews</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 COMPONENTS ============ -->
+<section id="components">
+  <div class="wrap">
+    <h2><span class="num">04</span> Components</h2>
+    <p class="section-lede">Controls name their action. Every state ships: default, hover, focus,
+      disabled, loading, error.</p>
+
+    <h3>Buttons</h3>
+    <div class="row">
+      <button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7" transform="rotate(180 12 12)"/></svg>Start queue</button>
+      <button class="btn btn-secondary">Launch server</button>
+      <button class="btn btn-ghost">Run again</button>
+      <button class="btn btn-danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Stop</button>
+      <button class="btn btn-danger-ghost">Delete model</button>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" disabled>Start queue</button>
+      <button class="btn btn-primary"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>Launching…</button>
+      <button class="btn btn-sm btn-secondary">Health check</button>
+      <button class="icon-btn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></button>
+    </div>
+
+    <h3>Form controls</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 32px">
+      <div class="field">
+        <label for="i1">Hugging Face repo</label>
+        <input class="input" id="i1" type="text" value="bartowski/Qwen2.5-14B-Instruct-GGUF">
+        <div class="hint">Public repos only — the panel holds no HF credentials.</div>
+      </div>
+      <div class="field field-error">
+        <label for="i2">Port</label>
+        <input class="input" id="i2" type="text" value="80">
+        <div class="hint">Port 80 is below the allowed range (1024–65535).</div>
+      </div>
+      <div class="field">
+        <label for="i3">API model name</label>
+        <select class="select" id="i3"><option>qwen-main</option><option>mistral-small</option></select>
+        <div class="hint">Passed to the child as <code class="mono">--alias</code>; your LiteLLM route stays fixed.</div>
+      </div>
+      <div class="field">
+        <label for="i4">Extra arguments — one per line, no shell</label>
+        <textarea class="textarea" id="i4" rows="3">--flash-attn
+--mlock</textarea>
+      </div>
+      <label class="check-row"><input type="checkbox" class="checkbox" checked> Revalidate ETag on resume</label>
+      <label class="check-row"><input type="checkbox" class="checkbox"> Bind to 0.0.0.0 (not recommended)</label>
+      <label class="check-row"><input type="checkbox" class="toggle" checked> Keep last log line pinned</label>
+    </div>
+
+    <h3>Status badges</h3>
+    <div class="row">
+      <span class="badge badge-ok">running</span>
+      <span class="badge badge-warn">launching</span>
+      <span class="badge badge-info">downloading</span>
+      <span class="badge badge-bad">error</span>
+      <span class="badge badge-idle">stopped</span>
+    </div>
+
+    <h3>Progress</h3>
+    <div style="display:grid;gap:14px;max-width:520px">
+      <div><div class="progress"><i style="width:78%"></i></div></div>
+      <div><div class="progress info"><i style="width:12%"></i></div></div>
+      <div><div class="progress ok"><i style="width:100%"></i></div></div>
+    </div>
+
+    <h3>Disclosed power</h3>
+    <div class="callout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>
+      <p><strong>This panel deletes models and runs your runtime.</strong> It ships without
+        authentication on purpose — access control belongs to your Pangolin policy, not to a
+        second login nobody trusts.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5 THE PANEL ============ -->
+<section id="panel">
+  <div class="wrap">
+    <h2><span class="num">05</span> Inside the tambo</h2>
+    <p class="section-lede">The panel itself wearing the skin: the same four surfaces the README
+      documents, numbered in the order of a keeper's rounds. Rows below are synthetic sample data.</p>
+
+    <div class="preview-frame">
+      <div class="preview-bar">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect class="door-frame" x="1" y="1" width="30" height="30"/><path class="door-glow" d="M10 27 v-9 a6 6 0 0 1 12 0 v9 z"/></svg>
+        <span class="url">http://127.0.0.1:8090</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="chip" style="border-color:var(--t-ok);color:var(--t-ok)">host: thinkserver</span>
+      </div>
+      <div class="preview-body">
+        <nav class="rail" role="tablist" aria-label="Panel sections" aria-orientation="vertical">
+          <button class="item" role="tab" aria-selected="false" data-pane="p-dl">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M6 11l6 6 6-6"/><path d="M4 21h16"/></svg>
+            Downloads <span class="count">3</span></button>
+          <button class="item" role="tab" aria-selected="false" data-pane="p-models">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg>
+            Models <span class="count">6</span></button>
+          <button class="item" role="tab" aria-selected="true" data-pane="p-servers">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+            Servers <span class="count">2</span></button>
+          <button class="item" role="tab" aria-selected="false" data-pane="p-gw">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h5M15 12h5"/><path d="M9 12a3 3 0 0 1 3-3v6a3 3 0 0 1-3-3z"/><path d="M15 9v6"/></svg>
+            Gateway</button>
+        </nav>
+
+        <div style="min-width:0">
+          <!-- Downloads -->
+          <div class="pane" id="p-dl" hidden role="tabpanel">
+            <h4>Downloads</h4>
+            <p class="pane-lede">Queued by repo and exact filename. Two transfers run at once.</p>
+            <div class="dl-row">
+              <div class="dl-main">
+                <span class="fname">llama-3.2-11b-vision-instruct-Q4_K_M.gguf</span>
+                <div class="progress"><i style="width:78%"></i></div>
+                <div class="dl-stats"><span>6.9 / 8.8 GB</span><span>41 MB/s</span></div>
+              </div>
+              <span class="badge badge-info">downloading</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">bartowski/…</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">ETA 47s</span>
+              <button class="icon-btn" aria-label="Cancel download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+            <div class="dl-row">
+              <div class="dl-main">
+                <span class="fname">gemma-2-9b-it-Q5_K_M.gguf</span>
+                <div class="progress info"><i style="width:4%"></i></div>
+                <div class="dl-stats"><span>resumed · .part kept</span><span>awaiting slot</span></div>
+              </div>
+              <span class="badge badge-warn">queued</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">Orchid/…</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">—</span>
+              <button class="icon-btn" aria-label="Cancel download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+            <div class="dl-row">
+              <div class="dl-main">
+                <span class="fname">phi-3.5-mini-instruct-Q4_K_M.gguf</span>
+                <div class="progress ok"><i style="width:100%"></i></div>
+                <div class="dl-stats"><span>2.2 GB · checksum held</span><span>stored 2 h ago</span></div>
+              </div>
+              <span class="badge badge-ok">stored</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">Microsoft/…</span>
+              <span class="mono-cell" style="font:400 var(--t-fs-12)/1.5 var(--t-font-mono);color:var(--t-text-3)">—</span>
+              <span></span>
+            </div>
+          </div>
+
+          <!-- Models -->
+          <div class="pane" id="p-models" hidden role="tabpanel">
+            <h4>Models</h4>
+            <p class="pane-lede">The directory is the inventory. Nothing is hidden, nothing is implied.</p>
+            <table class="table">
+              <thead><tr><th>File</th><th>Size</th><th>Modified</th><th style="text-align:right">Actions</th></tr></thead>
+              <tbody>
+                <tr><td><span class="fname">qwen2.5-14b-instruct-q5_k_m.gguf</span></td>
+                  <td class="num">9.9 GB</td><td class="num">Nov 11</td>
+                  <td style="text-align:right"><button class="btn btn-sm btn-secondary">Launch</button>&nbsp;<button class="btn btn-sm btn-danger-ghost">Delete</button></td></tr>
+                <tr><td><span class="fname">mistral-7b-instruct-v0.3-q4_k_m.gguf</span></td>
+                  <td class="num">4.4 GB</td><td class="num">Nov 09</td>
+                  <td style="text-align:right"><button class="btn btn-sm btn-secondary">Launch</button>&nbsp;<button class="btn btn-sm btn-danger-ghost">Delete</button></td></tr>
+                <tr><td><span class="fname">llama-3.1-8b-instruct-q6_k.gguf</span></td>
+                  <td class="num">6.6 GB</td><td class="num">Oct 31</td>
+                  <td style="text-align:right"><button class="btn btn-sm btn-secondary">Launch</button>&nbsp;<button class="btn btn-sm btn-danger-ghost">Delete</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Servers -->
+          <div class="pane" id="p-servers" role="tabpanel">
+            <h4>Servers</h4>
+            <p class="pane-lede">Your binary, your arguments — exactly as launched.</p>
+
+            <div class="srv">
+              <div class="srv-head">
+                <span class="badge badge-ok">running</span>
+                <span class="srv-name">qwen-main</span>
+                <span class="srv-meta">pid 31415 · 127.0.0.1:8081 · ctx 8192 · -ngl 40</span>
+                <span class="grow"></span>
+                <button class="btn btn-sm btn-secondary">Health</button>
+                <button class="btn btn-sm btn-secondary">Run again</button>
+                <button class="btn btn-sm btn-danger">Stop</button>
+              </div>
+              <div class="argvec">/home/emil/llama.cpp/build/bin/llama-server <span class="flag">--model</span> /models/qwen2.5-14b-instruct-q5_k_m.gguf <span class="flag">--alias</span> qwen-main <span class="flag">--port</span> 8081 <span class="flag">--ctx-size</span> 8192 <span class="flag">--n-gpu-layers</span> 40 <span class="flag">--flash-attn</span></div>
+              <div class="console" id="log">
+<span class="t">18:41:02.107</span> registering: 1 of 1 tokens<br>
+<span class="t">18:41:03.884</span> kv_self.n = 8192 · kv size MB = 612<br>
+<span class="t">18:41:04.220</span> <span class="ok">server listening on 127.0.0.1:8081</span><br>
+<span class="t">18:42:11.033</span> POST /v1/chat/completions — qwen-main — 142 tok/s<br>
+<span class="t">18:43:57.911</span> <span class="w">slot n_keep = 0 — prompt context compressed</span><br>
+<span class="t">18:44:02.507</span> POST /v1/chat/completions — qwen-main — 138 tok/s
+              </div>
+            </div>
+
+            <div class="srv">
+              <div class="srv-head">
+                <span class="badge badge-idle">stopped</span>
+                <span class="srv-name">mistral-small</span>
+                <span class="srv-meta">stopped 3 h ago · exit 0 · saved settings kept</span>
+                <span class="grow"></span>
+                <button class="btn btn-sm btn-primary">Start again</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gateway -->
+          <div class="pane" id="p-gw" hidden role="tabpanel">
+            <h4>Gateway</h4>
+            <p class="pane-lede">OpenAI-compatible traffic, routed by the request's model field.</p>
+            <div style="display:grid;gap:14px;max-width:620px">
+              <div class="route"><span class="method">GET</span> /v1/models <span class="arrow">→</span> live inventory <span class="badge badge-ok">2 served</span></div>
+              <div class="route"><span class="method">POST</span> /v1/chat/completions <span class="arrow">→</span> <span class="mono">"qwen-main"</span> → 127.0.0.1:8081</div>
+              <div class="route"><span class="method">POST</span> /v1/completions <span class="arrow">→</span> <span class="mono">"qwen-main"</span> → 127.0.0.1:8081</div>
+              <div class="route"><span class="method">POST</span> /v1/embeddings <span class="arrow">→</span> <span class="mono">"mistral-small"</span> <span class="badge badge-idle">not running</span></div>
+            </div>
+            <div class="callout" style="margin-top:22px;background:var(--t-info-soft);border-color:color-mix(in srgb, var(--t-info) 32%, transparent)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color:var(--t-info)"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.5"/></svg>
+              <p>SSE streams and error statuses pass through untouched. A caller disconnecting
+                 cancels the upstream request. Auth headers are stripped before forwarding.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6 MOTION ============ -->
+<section id="motion">
+  <div class="wrap">
+    <h2><span class="num">06</span> Motion</h2>
+    <p class="section-lede">One authored moment: the doorway in the mark lights when the panel
+      opens — a tambo with the lamp on. Everything else moves once, quickly, and stops.
+      Hover the tracks.</p>
+    <div class="motion-row"><div class="motion-demo md-fast"><i></i></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-fast · 120ms — hover, press, color</span></div>
+    <div class="motion-row"><div class="motion-demo md-med"><i></i></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-med · 200ms — theme, toggle, toast</span></div>
+    <div class="motion-row"><div class="motion-demo md-slow"><i></i></div>
+      <span class="mono" style="font-size:var(--t-fs-12);color:var(--t-text-3)">--t-t-slow · 320ms — progress, pane crossfade</span></div>
+    <p style="color:var(--t-text-2);font-size:var(--t-fs-14);max-width:46rem;margin-top:18px">All easing is
+      <code class="mono">cubic-bezier(0.16, 1, 0.3, 1)</code>: fast out, settle soft. Nothing bounces,
+      nothing parallaxes, and <code class="mono">prefers-reduced-motion</code> stills every loop.</p>
+  </div>
+</section>
+
+<!-- ============ 7 TOKENS ============ -->
+<section id="tokens">
+  <div class="wrap">
+    <h2><span class="num">07</span> Token index</h2>
+    <p class="section-lede">Every value on this sheet resolves to one of these custom properties —
+      the same block ships into the app's stylesheet.</p>
+    <div style="overflow-x:auto">
+      <table class="tokens">
+        <thead><tr><th>Token</th><th>Dark (primary)</th><th>Light</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td>--t-bg</td><td>#14100C</td><td>#F4EEE5</td><td>page ground</td></tr>
+          <tr><td>--t-bg-deep</td><td>#0F0C09</td><td>#221B14</td><td>consoles, inputs</td></tr>
+          <tr><td>--t-panel</td><td>#1A1511</td><td>#FDFAF4</td><td>panels</td></tr>
+          <tr><td>--t-panel-2</td><td>#211B15</td><td>#F0E8DB</td><td>rails, rows hover</td></tr>
+          <tr><td>--t-line</td><td>#362D24</td><td>#DDD0BD</td><td>borders</td></tr>
+          <tr><td>--t-text</td><td>#F0E9DF</td><td>#241B12</td><td>primary text</td></tr>
+          <tr><td>--t-text-2</td><td>#B5A897</td><td>#5D5041</td><td>secondary text</td></tr>
+          <tr><td>--t-accent</td><td>#E2622C</td><td>#C94E1E</td><td>madder · primary action</td></tr>
+          <tr><td>--t-accent-ink</td><td>#F0854F</td><td>#A53D18</td><td>accent as text</td></tr>
+          <tr><td>--t-ok</td><td>#4AC08A</td><td>#177A52</td><td>running, stored</td></tr>
+          <tr><td>--t-warn</td><td>#E6B33F</td><td>#8F6A12</td><td>launching, caution</td></tr>
+          <tr><td>--t-bad</td><td>#D64556</td><td>#B32A3D</td><td>error, destructive</td></tr>
+          <tr><td>--t-info</td><td>#7A9CD8</td><td>#3A5E9E</td><td>in flight</td></tr>
+          <tr><td>--t-r-2</td><td colspan="2">4px</td><td>controls corner</td></tr>
+          <tr><td>--t-t-med</td><td colspan="2">200ms</td><td>default transition</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="synthetic">sample data — synthetic</span><br>
+    tambo · the waystation for your models — design language v1 for the rebrand of llama-desk.
+    MIT © 2026 Emil Kelhala. One binary, no database, your machine, your build.
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite">Copied</div>
+
+<script>
+// theme
+const root = document.documentElement;
+const saved = localStorage.getItem('tambo-theme');
+if (saved) root.dataset.theme = saved;
+document.getElementById('themeToggle').addEventListener('click', () => {
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('tambo-theme', root.dataset.theme);
+});
+
+// copy-hex toast
+const toast = document.getElementById('toast');
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1400);
+}
+
+// color ramps
+const darkRamp = [
+  ['bg','#14100C'],['bg-deep','#0F0C09'],['panel','#1A1511'],['panel-2','#211B15'],
+  ['raised','#29221B'],['line','#362D24'],['line-soft','#2A231C'],['text-3','#8A7A68'],
+  ['text-2','#B5A897'],['text','#F0E9DF']
+];
+const madderRamp = [
+  ['50','#FDF1EA'],['100','#FADFCC'],['200','#F4BA97'],['300','#ED9263'],['400','#E77440'],
+  ['500','#E2622C'],['600','#C94E1E'],['700','#A53D18'],['800','#833117'],['900','#6B2A16']
+];
+function ramp(el, data) {
+  el.innerHTML = data.map(([name, hex]) =>
+    `<button class="swatch" data-hex="${hex}" title="Copy ${hex}">
+       <div class="fill" style="background:${hex}"></div>
+       <div class="meta"><span class="name">${name}</span><span class="hex">${hex}</span></div>
+     </button>`).join('');
+}
+document.querySelectorAll('[data-ramp]').forEach(el =>
+  ramp(el, el.dataset.ramp === 'dark' ? darkRamp : madderRamp));
+
+document.addEventListener('click', e => {
+  const src = e.target.closest('[data-hex]');
+  if (!src) return;
+  const hex = src.dataset.hex;
+  (navigator.clipboard?.writeText(hex) ?? Promise.reject())
+    .then(() => showToast('Copied ' + hex))
+    .catch(() => showToast(hex));
+});
+
+// panel preview tabs
+const rail = document.querySelector('.preview-body .rail');
+rail.addEventListener('click', e => {
+  const tab = e.target.closest('[data-pane]');
+  if (!tab) return;
+  rail.querySelectorAll('.item').forEach(t => t.setAttribute('aria-selected', t === tab));
+  document.querySelectorAll('.pane').forEach(p => p.hidden = p.id !== tab.dataset.pane);
+});
+</script>
+</body>
+</html>
