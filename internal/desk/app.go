@@ -150,6 +150,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/state", a.state)
 	mux.HandleFunc("POST /api/downloads", a.addDownload)
 	mux.HandleFunc("POST /api/downloads/{id}/{action}", a.jobAction)
+	mux.HandleFunc("GET /api/repository", a.browseRepository)
 	mux.HandleFunc("POST /api/runs", a.launch)
 	mux.HandleFunc("POST /api/runs/{id}/stop", a.stopRun)
 	mux.HandleFunc("GET /api/runs/{id}/logs", a.logs)
@@ -261,7 +262,7 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 		runs = append(runs, run)
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].Started.After(runs[j].Started) })
-	respond(w, 200, map[string]any{"settings": map[string]any{"models": a.models, "binary": a.binary, "parallel_downloads": cap(a.slots)}, "models": models, "jobs": jobs, "runs": runs, "profiles": a.profiles})
+	respond(w, 200, map[string]any{"settings": map[string]any{"models": a.models, "binary": a.binary, "parallel_downloads": cap(a.slots)}, "models": models, "catalog": catalogFrom(models), "jobs": jobs, "runs": runs, "profiles": a.profiles})
 }
 
 func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {

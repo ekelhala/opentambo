@@ -32,18 +32,28 @@ type Job struct {
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// Build the file URLs on the server so users only need a repository and filenames.
-func repositoryURLs(repo, revision string, files []string) ([]string, error) {
+// validateRepository checks the shared repo/revision inputs used by the
+// download and repository-listing endpoints.
+func validateRepository(repo, revision string) error {
 	parts := strings.Split(strings.TrimSpace(repo), "/")
 	if len(parts) != 2 || !repoPart.MatchString(parts[0]) || !repoPart.MatchString(parts[1]) {
-		return nil, errors.New("enter the Hugging Face repository as owner/name")
+		return errors.New("enter the Hugging Face repository as owner/name")
 	}
 	revision = strings.TrimSpace(revision)
+	if revision != "" && !repoPart.MatchString(revision) {
+		return errors.New("revision must be a branch name, tag or commit without slashes")
+	}
+	return nil
+}
+
+// Build the file URLs on the server so users only need a repository and filenames.
+func repositoryURLs(repo, revision string, files []string) ([]string, error) {
+	if err := validateRepository(repo, revision); err != nil {
+		return nil, err
+	}
+	parts := strings.Split(strings.TrimSpace(repo), "/")
 	if revision == "" {
 		revision = "main"
-	}
-	if !repoPart.MatchString(revision) {
-		return nil, errors.New("revision must be a branch name, tag or commit without slashes")
 	}
 	if len(files) < 1 || len(files) > 32 {
 		return nil, errors.New("provide between 1 and 32 filenames")

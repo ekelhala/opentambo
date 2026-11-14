@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,7 +78,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	}
 	spec.Name = strings.TrimSpace(spec.Name)
 	if spec.Name == "" {
-		spec.Name = strings.TrimSuffix(filepath.Base(spec.Model), filepath.Ext(spec.Model))
+		spec.Name = defaultModelName(spec.Model)
 	}
 	if spec.Name == "" || strings.Contains(spec.Name, ",") || strings.IndexFunc(spec.Name, unicode.IsControl) >= 0 || len(spec.Name) > 256 {
 		fail(w, errors.New("model name must be at most 256 characters and cannot contain commas or control characters"))

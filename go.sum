@@ -1,0 +1,12 @@
+github.com/gofrs/flock v0.13.0 h1:95JolYOvGMqeH31+FC7D2+uULf6mG61mEZ/A8dRYMzw=
+github.com/gofrs/flock v0.13.0/go.mod h1:jxeyy9R1auM5S6JYDBhDt+E2TCo7DkratH4Pgi8P+Z0=
+github.com/gomlx/compute v0.1.28 h1:3o0pCmmg3QzZMMS5PR6nUnyRzEMPXI0uGrzcIP+qpPU=
+github.com/gomlx/compute v0.1.28/go.mod h1:+IyIusGBr70LPqKcULueB2VTTXmJ3HqOdPmRM8O1Sug=
+github.com/gomlx/go-huggingface v0.4.32 h1:bw/nY5FAgVWTVX7ZOxsK6FhGn/hz2CdwKax00heFpBw=
+github.com/gomlx/go-huggingface v0.4.32/go.mod h1:H+VXf59NxO35kKu2sUQnmcQgx0J3HkpejALhkGG2wbo=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
+github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
+golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
