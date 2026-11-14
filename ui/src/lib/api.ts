@@ -37,9 +37,43 @@ export interface ModelFile {
   modified: string
 }
 
+export interface Quantization {
+  label: string
+  family: string
+  primary: string
+  files: ModelFile[]
+  size: number
+  shards: number
+  modified: string
+  projection: boolean
+}
+
+export interface CatalogModel {
+  repo: string
+  path: string
+  quantizations: Quantization[]
+  size: number
+  modified: string
+}
+
+export interface RepositoryFile {
+  name: string
+  size: number
+}
+
+export interface RepositoryQuantization {
+  label: string
+  family: string
+  files: RepositoryFile[]
+  size: number
+  shards: number
+  projection: boolean
+}
+
 export interface State {
   settings: { models: string; binary: string; parallel_downloads: number }
   models: ModelFile[]
+  catalog: CatalogModel[]
   jobs: Job[]
   runs: Run[]
   profiles: Record<string, Launch>

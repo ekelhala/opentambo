@@ -26,3 +26,9 @@ export function date(value: string): string {
 export function shellQuote(arg: string): string {
   return /^[\w./:=@+-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`
 }
+
+/** File stem without .gguf and without a shard counter, mirroring the backend's default alias. */
+export function modelStem(path: string): string {
+  const base = path.split('/').pop() ?? path
+  return base.replace(/\.gguf$/i, '').replace(/[-_.]\d{5}-of-\d{5}$/i, '')
+}

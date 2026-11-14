@@ -78,7 +78,12 @@ export function DashboardView({ state, history }: { state: State; history: Histo
             </span>
           }
         />
-        <Stat k="Model disk" v={`${state.models.length}`} u={`· ${bytes(disk)}`} f={state.settings.models} />
+        <Stat
+          k="Model disk"
+          v={`${state.catalog.length}`}
+          u={`· ${bytes(disk)}`}
+          f={`${state.models.length} GGUF files in ${state.settings.models}`}
+        />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -202,12 +207,12 @@ interface DiskSegment {
 }
 
 function diskSegments(state: State): DiskSegment[] {
-  const byDir = new Map<string, number>()
-  for (const model of state.models) {
-    const dir = model.path.includes('/') ? model.path.split('/')[0] : '(root)'
-    byDir.set(dir, (byDir.get(dir) || 0) + model.size)
+  const byRepo = new Map<string, number>()
+  for (const model of state.catalog) {
+    const label = model.repo || '(root)'
+    byRepo.set(label, (byRepo.get(label) || 0) + model.size)
   }
-  const sorted = [...byDir.entries()].sort((a, b) => b[1] - a[1])
+  const sorted = [...byRepo.entries()].sort((a, b) => b[1] - a[1])
   const top = sorted.slice(0, 4)
   const rest = sorted.slice(4)
   const segments = top.map(([label, value], i) => ({ label, value, color: SEGMENT_COLORS[i] }))

@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { CloseIcon, DownloadIcon, PlayIcon } from '@/components/icons'
+import { CloseIcon, DownloadIcon, PlayIcon, SearchIcon, SpinnerIcon } from '@/components/icons'
 import { AreaChart } from '@/components/sparkline'
 import { StatusPill } from '@/components/status-pill'
 import { Button } from '@/components/ui/button'
+import { api, type RepositoryQuantization } from '@/lib/api'
 import { bytes, duration } from '@/lib/format'
 import type { Job, State } from '@/lib/api'
+import { toast } from 'sonner'
 
 export function DownloadsView({
   state,
@@ -70,11 +72,39 @@ function DownloadForm({
   const [repo, setRepo] = useState('')
   const [files, setFiles] = useState('')
   const [revision, setRevision] = useState('')
+  const [quants, setQuants] = useState<RepositoryQuantization[] | null>(null)
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const repoLooksValid = /^[\w.-]+\/[\w.-]+$/.test(repo.trim())
+
+  async function lookUp() {
+    const trimmed = repo.trim()
+    if (!repoLooksValid) return
+    setLookupBusy(true)
+    try {
+      const query = new URLSearchParams({ repo: trimmed })
+      if (revision.trim()) query.set('revision', revision.trim())
+      const result = await api<{ quantizations: RepositoryQuantization[] }>(
+        `repository?${query.toString()}`
+      )
+      setQuants(result.quantizations)
+      if (!result.quantizations.length)
+        toast.message('No GGUF quantizations found in that repository')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLookupBusy(false)
+    }
+  }
+
+  function pick(quant: RepositoryQuantization) {
+    setFiles(quant.files.map((file) => file.name).join('\n'))
+  }
+
   return (
     <div className={`panel ${className ?? ''}`}>
       <div className="panel-head">
         <span className="panel-title">New download</span>
-        <span className="panel-meta">public repos · exact GGUF filenames</span>
+        <span className="panel-meta">public repos · pick a quantization, shards handled for you</span>
       </div>
       <div className="panel-body">
         <form
@@ -89,7 +119,7 @@ function DownloadForm({
             setFiles('')
           }}
         >
-          <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+          <div className="grid gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
             <div className="field">
               <label htmlFor="dl-repo">Repository</label>
               <input
@@ -98,12 +128,17 @@ function DownloadForm({
                 required
                 placeholder="owner/repo"
                 value={repo}
-                onChange={(event) => setRepo(event.target.value)}
+                onChange={(event) => {
+                  setRepo(event.target.value)
+                  setQuants(null)
+                }}
                 spellCheck={false}
               />
             </div>
             <div className="field">
-              <label htmlFor="dl-rev">Revision <span className="text-[var(--t-text-3)]">(optional)</span></label>
+              <label htmlFor="dl-rev">
+                Revision <span className="text-[var(--t-text-3)]">(optional)</span>
+              </label>
               <input
                 id="dl-rev"
                 className="input mono"
@@ -113,9 +148,40 @@ function DownloadForm({
                 spellCheck={false}
               />
             </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={lookUp}
+              disabled={lookupBusy || !repoLooksValid}
+            >
+              {lookupBusy ? <SpinnerIcon /> : <SearchIcon />} Look up quantizations
+            </Button>
           </div>
+          {quants && quants.length > 0 && (
+            <div className="grid gap-1.5" role="list" aria-label="Quantizations in the repository">
+              {quants.map((quant) => (
+                <button
+                  key={`${quant.label}-${quant.family}-${quant.files[0]?.name}`}
+                  type="button"
+                  role="listitem"
+                  onClick={() => pick(quant)}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-[var(--t-line)] bg-[var(--t-bg-raised,var(--t-bg))] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--t-accent)]"
+                >
+                  <span className="badge badge-info shrink-0">{quant.label || 'default'}</span>
+                  {quant.family && <span className="mono truncate">{quant.family}</span>}
+                  {quant.projection && <span className="badge badge-idle shrink-0">vision mmproj</span>}
+                  <span className="num ml-auto shrink-0 text-[var(--t-text-2)]">
+                    {bytes(quant.size)}
+                    {quant.shards > 1 ? ` · ${quant.shards} shards` : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="field">
-            <label htmlFor="dl-files">Files <span className="text-[var(--t-text-3)]">(one per line, subdirectories allowed)</span></label>
+            <label htmlFor="dl-files">
+              Files <span className="text-[var(--t-text-3)]">(one per line, subdirectories allowed)</span>
+            </label>
             <textarea
               id="dl-files"
               className="textarea mono"
@@ -127,8 +193,9 @@ function DownloadForm({
               spellCheck={false}
             />
             <p className="f-hint">
-              Transfers land as <span className="mono">.part</span> files and are verified before the
-              final name is claimed. Existing files are never replaced.
+              Pick a quantization above to fill this automatically, or type exact filenames.
+              Transfers land as <span className="mono">.part</span> files and are verified before
+              the final name is claimed. Existing files are never replaced.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-1">

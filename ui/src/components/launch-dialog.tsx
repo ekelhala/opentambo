@@ -16,12 +16,36 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { api, type Launch, type State } from '@/lib/api'
-import { bytes, shellQuote } from '@/lib/format'
+import { bytes, modelStem, shellQuote } from '@/lib/format'
 import { toast } from 'sonner'
 
 export interface LaunchDraft {
   model?: string
   launch?: Launch
+}
+
+interface ModelOption {
+  primary: string
+  repo: string
+  label: string
+  size: number
+  shards: number
+}
+
+/** Launchable options from the catalog: one per repository + quantization.
+ *  The system resolves which file (the first shard) actually runs. */
+function modelOptions(state: State): ModelOption[] {
+  return state.catalog.flatMap((model) =>
+    model.quantizations
+      .filter((quant) => !quant.projection)
+      .map((quant) => ({
+        primary: quant.primary,
+        repo: model.repo,
+        label: quant.label || quant.family || 'default',
+        size: quant.size,
+        shards: quant.shards,
+      }))
+  )
 }
 
 export function LaunchDialog({
@@ -36,7 +60,9 @@ export function LaunchDialog({
   onLaunched: () => void
 }) {
   const profile = (draft.model && state.profiles[draft.model]) || draft.launch
+  const options = modelOptions(state)
   const [model, setModel] = useState(draft.model || draft.launch?.model || '')
+  const selected = options.find((option) => option.primary === model)
   const [name, setName] = useState(profile?.name || '')
   const [context, setContext] = useState(String(profile?.context ?? 8192))
   const [gpu, setGpu] = useState(String(profile?.gpu_layers ?? 99))
@@ -50,7 +76,7 @@ export function LaunchDialog({
   const [busy, setBusy] = useState(false)
 
   const specArgs = args.split('\n').map((s) => s.trim()).filter(Boolean)
-  const specName = name.trim() || model.split('/').pop()?.replace(/\.gguf$/i, '') || 'model'
+  const specName = name.trim() || (model ? modelStem(model) : 'model')
   const command = [
     state.settings.binary,
     '--model',
@@ -117,17 +143,29 @@ export function LaunchDialog({
             <label htmlFor="launch-model">Model</label>
             <Select value={model} onValueChange={setModel} required>
               <SelectTrigger id="launch-model" className="w-full">
-                <SelectValue placeholder="Select a GGUF file" />
+                <SelectValue placeholder="Select a downloaded model" />
               </SelectTrigger>
               <SelectContent>
-                {state.models.map((m) => (
-                  <SelectItem key={m.path} value={m.path}>
-                    {m.path}
-                    <span className="select-item-meta">{bytes(m.size)}</span>
+                {options.map((option) => (
+                  <SelectItem key={`${option.repo} ${option.label} ${option.primary}`} value={option.primary}>
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+                      <span className="truncate">{option.repo}</span>
+                      <span className="badge badge-info shrink-0">{option.label}</span>
+                    </span>
+                    <span className="select-item-meta">
+                      {bytes(option.size)}
+                      {option.shards > 1 ? ` · ${option.shards} shards` : ''}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {selected && selected.shards > 1 && (
+              <p className="f-hint">
+                Split model · llama-server loads all {selected.shards} shards starting from{' '}
+                <span className="mono">{selected.primary.split('/').pop()}</span>
+              </p>
+            )}
           </div>
           <div className="field">
             <label htmlFor="launch-name">API model name</label>
@@ -136,7 +174,7 @@ export function LaunchDialog({
               className="input mono"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={model.split('/').pop()?.replace(/\.gguf$/i, '')}
+              placeholder={model ? modelStem(model) : undefined}
             />
           </div>
           <div className="grid grid-cols-3 gap-3">

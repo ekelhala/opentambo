@@ -36,6 +36,7 @@ import { toast } from 'sonner'
 const EMPTY_STATE: State = {
   settings: { models: '', binary: '', parallel_downloads: 0 },
   models: [],
+  catalog: [],
   jobs: [],
   runs: [],
   profiles: {},
@@ -132,7 +133,7 @@ export default function App() {
         counts={{
           servers: running.length,
           downloads: data.jobs.filter((j) => j.status === 'queued' || j.status === 'downloading').length,
-          files: data.models.length,
+          files: data.catalog.length,
           gateway: running.length,
         }}
       />
