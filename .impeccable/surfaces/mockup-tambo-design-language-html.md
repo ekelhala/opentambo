@@ -15,7 +15,7 @@ THESIS: The category standard, executed impeccably — the token sheet + live co
 
 OWN-WORLD: Warm brown-tinted near-black ink ground (dark primary, light secondary), one committed madder-orange accent ramp (#E2622C core), semantic status colors kept distinct from the accent, hairline borders, real elevation (offset + soft blur). Radius scale 0/2/4/6 with 4px as the ceiling on surfaces — angular, not pillowy. Inter for UI, JetBrains Mono for data; drawn 1.5-stroke SVG icons only.
 
-STORY: The reader scans tokens, touches components in every state, then sees the actual panel (Downloads / Models / Servers / Gateway) wearing the skin, and believes tambo is llama-desk's credible successor: plain, warm, in control.
+STORY: The reader scans tokens, touches components in every state, then sees the actual panel (Downloads / Models / Servers / Gateway) wearing the skin, and believes tambo is opentambo's credible successor: plain, warm, in control.
 
 FIRST VIEWPORT: Header with a square-arched doorway mark (a tambo entrance, drawn geometrically), wordmark tambo, the line "The waystation for your models", theme toggle at the far edge; the Color section begins immediately below — neutral ramp, orange ramp, semantic set — hex chips copy on click.
 

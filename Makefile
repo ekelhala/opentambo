@@ -1,12 +1,12 @@
-BINARY  := llama-desk
+BINARY  := opentambo
 BIN_DIR := bin
 WEB_DIR := internal/desk/web
 
-# Local overrides (see .env.example), e.g. LLAMA_DESK_LISTEN=127.0.0.1:8091
+# Local overrides (see .env.example), e.g. OPENTAMBO_LISTEN=127.0.0.1:8091
 # when the default port is taken. Exported so both the Go backend and the
 # Vite dev server pick them up.
 -include .env
-export LLAMA_DESK_LISTEN
+export OPENTAMBO_LISTEN
 
 .PHONY: all build ui dev test clean
 
@@ -14,9 +14,9 @@ all: build
 
 ## build: production build — compile the web UI, then the binary with the UI embedded
 build: ui
-	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o $(BIN_DIR)/$(BINARY) ./cmd/$(BINARY)
+	CGO_ENABLED=0 go build -tags ui -trimpath -ldflags "-s -w" -o $(BIN_DIR)/$(BINARY) ./cmd/$(BINARY)
 
-## ui: production build of the web UI into $(WEB_DIR), where //go:embed picks it up
+## ui: production build of the web UI into $(WEB_DIR); -tags ui embeds it
 ui: ui/node_modules
 	cd ui && bun run build
 

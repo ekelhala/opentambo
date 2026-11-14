@@ -10,15 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ekelhala/llama-desk/internal/desk"
+	"github.com/ekelhala/opentambo/internal/desk"
 )
 
 func main() {
-	defaultListen := os.Getenv("LLAMA_DESK_LISTEN")
+	defaultListen := os.Getenv("OPENTAMBO_LISTEN")
 	if defaultListen == "" {
 		defaultListen = "127.0.0.1:8090"
 	}
-	listen := flag.String("listen", defaultListen, "HTTP listen address (env LLAMA_DESK_LISTEN)")
+	listen := flag.String("listen", defaultListen, "HTTP listen address (env OPENTAMBO_LISTEN)")
 	models := flag.String("models", "./models", "model directory")
 	binary := flag.String("llama-server", "llama-server", "native llama-server executable")
 	data := flag.String("data", "./data", "job history and launch settings directory")
@@ -38,7 +38,7 @@ func main() {
 		_ = server.Shutdown(shutdown)
 		app.Close()
 	}()
-	log.Printf("llama-desk listening at http://%s (no authentication)", *listen)
+	log.Printf("opentambo listening at http://%s (no authentication)", *listen)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

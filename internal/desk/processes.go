@@ -113,7 +113,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	blocked := map[string]bool{"-m": true, "--model": true, "-a": true, "--alias": true, "--host": true, "--port": true, "-hf": true, "--hf-repo": true, "--models-preset": true, "--models-dir": true}
 	for _, arg := range spec.Args {
 		if blocked[strings.SplitN(arg, "=", 2)[0]] {
-			fail(w, fmt.Errorf("%s is managed by llama-desk", arg))
+			fail(w, fmt.Errorf("%s is managed by opentambo", arg))
 			return
 		}
 	}

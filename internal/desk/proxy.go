@@ -30,7 +30,7 @@ func (a *App) proxyModels(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	for _, run := range a.runs {
 		if run.Status == "running" {
-			models = append(models, model{run.Launch.Name, "model", run.Started.Unix(), "llama-desk"})
+			models = append(models, model{run.Launch.Name, "model", run.Started.Unix(), "opentambo"})
 		}
 	}
 	a.mu.Unlock()
@@ -66,7 +66,7 @@ func (a *App) proxyInference(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Unlock()
 	if port == 0 {
-		proxyError(w, 404, "model_not_found", "model is not running; start it in llama-desk first")
+		proxyError(w, 404, "model_not_found", "model is not running; start it in opentambo first")
 		return
 	}
 	ctx, cancel := context.WithCancel(r.Context())

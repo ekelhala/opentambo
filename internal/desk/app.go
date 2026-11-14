@@ -3,7 +3,6 @@ package desk
 import (
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,9 +18,6 @@ import (
 	"sync"
 	"time"
 )
-
-//go:embed web/*
-var assets embed.FS
 
 type Model struct {
 	Path     string    `json:"path"`

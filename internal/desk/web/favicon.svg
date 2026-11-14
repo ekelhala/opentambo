@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- tambo: the lit doorway -->
-  <rect width="32" height="32" rx="2" fill="#14100c" />
-  <path d="M10 27V13a6 6 0 0 1 12 0v14" fill="none" stroke="#362d24" stroke-width="2" />
-  <path d="M13.5 27V13a2.5 2.5 0 0 1 5 0v14" fill="#e2622c" />
-</svg>

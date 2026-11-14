@@ -1,4 +1,4 @@
-module github.com/ekelhala/llama-desk
+module github.com/ekelhala/opentambo
 
 go 1.27
 

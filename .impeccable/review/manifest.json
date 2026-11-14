@@ -1,5 +1,5 @@
 {
-  "purpose": "Verification evidence for the tambo reimplementation of the llama-desk web UI.",
+  "purpose": "Verification evidence for the tambo reimplementation of the opentambo web UI.",
   "capturedAt": "2026-11-14",
   "method": "chrome-devtools screenshots of the app served by the verification Go binary (/tmp/opencode/tambo-desk, UI embedded at compile time) at http://127.0.0.1:8097, with seeded local fixtures (fake-llama-server, tambo-models, tambo-data). No traffic left the machine.",
   "shippingRasters": "none — the shipped UI carries zero raster images. The favicon (ui/public/favicon.svg) and all icons (ui/src/components/icons.tsx, DoorwayMark) are hand-drawn SVG authored for this build; the tambo wordmark is Inter text.",

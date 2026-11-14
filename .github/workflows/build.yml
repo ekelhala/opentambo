@@ -24,27 +24,43 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Build web UI
+        working-directory: ui
+        run: |
+          bun install --frozen-lockfile
+          bun run build
       - name: Build single binary
         env:
           CGO_ENABLED: '0'
-          GOOS: linux
-          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags='-s -w' -o dist/llama-desk ./cmd/llama-desk
-          tar -C dist -czf llama-desk-linux-${{ matrix.arch }}.tar.gz llama-desk
-          sha256sum llama-desk-linux-${{ matrix.arch }}.tar.gz > llama-desk-linux-${{ matrix.arch }}.tar.gz.sha256
+          go build -tags ui -trimpath -ldflags='-s -w' -o dist/opentambo ./cmd/opentambo
+          tar -C dist -czf opentambo-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz opentambo
+          sha256sum opentambo-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz > opentambo-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: llama-desk-linux-${{ matrix.arch }}
-          path: llama-desk-linux-*
+          name: opentambo-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: opentambo-*
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -55,7 +71,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v5
         with:
-          pattern: llama-desk-linux-*
+          pattern: opentambo-*
           merge-multiple: true
           path: dist
       - name: Publish tagged binaries

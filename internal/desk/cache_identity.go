@@ -21,7 +21,7 @@ import (
 	"sync"
 )
 
-const identityHashTag = "llama-desk-prompt-cache-identity-v1\n"
+const identityHashTag = "opentambo-prompt-cache-identity-v1\n"
 
 // verifiedCacheArchitectures lists GGUF architectures that passed a real
 // save/restart/restore/reuse test against a supported llama-server build.

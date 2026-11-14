@@ -18,16 +18,16 @@ A small, unauthenticated web control panel for native `llama-server` processes: 
 
 ## Positioning
 
-One Go binary with the UI embedded, no database, npm, Docker, or bundled inference runtime — it manages the user's own native `llama-server` build with full argument/env transparency instead of wrapping or hiding it, and doubles as a minimal OpenAI-compatible gateway that routes by the request's `model` field to managed processes. Neighboring stacks (Ollama, Open WebUI, serving platforms) either own the runtime or need heavy infrastructure; llama-desk owns only the process management and keeps the exact command visible.
+One Go binary with the UI embedded, no database, npm, Docker, or bundled inference runtime — it manages the user's own native `llama-server` build with full argument/env transparency instead of wrapping or hiding it, and doubles as a minimal OpenAI-compatible gateway that routes by the request's `model` field to managed processes. Neighboring stacks (Ollama, Open WebUI, serving platforms) either own the runtime or need heavy infrastructure; opentambo owns only the process management and keeps the exact command visible.
 
 ## Operating Context
 
 - Linux inference host (amd64/arm64). Building needs Go 1.25+; running needs only the binary and a working `llama-server` build.
 - Listens on loopback (`127.0.0.1:8090` by default); security is delegated to the user's Pangolin access policy, with Newt tunneling when on another host.
 - Models live in a mounted GGUF directory (`--models`); transfer staging and state live under `--data` (`state.json`, owner-only permissions, plaintext env overrides).
-- LiteLLM is the upstream gateway that owns client keys, policies, and its own database. llama-desk does not sync its model list into LiteLLM; routes are registered there once per API model name.
+- LiteLLM is the upstream gateway that owns client keys, policies, and its own database. opentambo does not sync its model list into LiteLLM; routes are registered there once per API model name.
 - Panel workflows map 1:1 to README sections: Downloads (queue GGUFs by repo + filename), Models (scan, inspect, launch, delete), Servers (launch form, PID/state/logs/health, stop-then-kill).
-- Distribution: GitHub Actions artifacts and `v*` GitHub Releases; optional systemd unit at `deploy/llama-desk.service`.
+- Distribution: GitHub Actions artifacts and `v*` GitHub Releases; optional systemd unit at `deploy/opentambo.service`.
 
 ## Capabilities and Constraints
 
@@ -45,7 +45,7 @@ Deliberate boundaries (documented in README; future work must not quietly cross 
 - No Hugging Face browser, gated-repo credentials, shard discovery, or upstream checksum verification; split models are launched from the first shard manually; vision needs a manual `--mmproj` path.
 - GGUF inspection is filesystem metadata only, not parsed architecture/tensors.
 - No GPU memory/temperature, slot activity, or throughput telemetry; no log persistence; no automatic eviction, model loading, or LiteLLM registration.
-- Pre-existing `llama-server` on port 8080 is not adopted; managed processes bind to `127.0.0.1` only; one llama-desk instance per data directory; model servers do not auto-restart with the manager.
+- Pre-existing `llama-server` on port 8080 is not adopted; managed processes bind to `127.0.0.1` only; one opentambo instance per data directory; model servers do not auto-restart with the manager.
 
 Architecture posture (user-confirmed "mostly, but flexible"): single Go binary + embedded UI, no database/npm/Docker, delegated auth, files-as-inventory are strong preferences, not vows — future work may add auth, a database, or dependencies when a concrete need justifies it.
 
@@ -53,17 +53,17 @@ Terminology: **models** = GGUF files on disk; **downloads** = queued Hugging Fac
 
 ## Brand Commitments
 
-- Name: **llama-desk** (GitHub `ekelhala/llama-desk`, MIT, © 2026 Emil Kelhala).
+- Name: **opentambo** (GitHub `ekelhala/opentambo`, MIT, © 2026 Emil Kelhala).
 - Existing UI voice is plain and lightly warm: "Your models. Your server." / "A little room for your models." Numbered sections (01 Downloads…).
-- No binding visual direction has been declared. The shipped scaffold and `mockup/llama-desk-ui.html` are recorded under Evidence as artifacts, not as an approved world; visual direction is a later new-work decision.
+- No binding visual direction has been declared. The shipped scaffold and `mockup/opentambo-ui.html` are recorded under Evidence as artifacts, not as an approved world; visual direction is a later new-work decision.
 
 ## Evidence on Hand
 
 - `README.md` — complete product and API documentation: run flags, first-working-slice behavior, LiteLLM integration with example config, scaffold boundaries, build/release flow.
 - `internal/desk/web/` — the current embedded UI scaffold (`index.html` 24 lines, `style.css` one line, `app.js` 40 lines): light green-tinted minimal look.
-- `mockup/llama-desk-ui.html` — 1264-line standalone mockup, dark theme with amber accent; an uncommitted design exploration.
+- `mockup/opentambo-ui.html` — 1264-line standalone mockup, dark theme with amber accent; an uncommitted design exploration.
 - `internal/desk/*.go` with tests (`app_test.go`, `proxy_test.go`); `.github/workflows/build.yml` runs tests and builds signed-archived linux amd64/arm64 releases.
-- `deploy/llama-desk.service` — example systemd unit.
+- `deploy/opentambo.service` — example systemd unit.
 - Absent and not to be fabricated: testimonials, case studies, named users or customers, benchmarks, throughput numbers, press coverage.
 
 ## Product Principles

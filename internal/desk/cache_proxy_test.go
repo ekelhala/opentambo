@@ -363,7 +363,7 @@ func TestCacheRestoresAfterManagerRestart(t *testing.T) {
 	fx := newCacheFixture(t)
 	first := chatBody(`[{"role":"user","content":"remember this conversation"}]`)
 	fx.post(t, first)
-	// Simulate a llama-desk restart against the same store and child server.
+	// Simulate a opentambo restart against the same store and child server.
 	restarted := newRunCache(fx.rc.spec, "ns", fx.rc.client, fx.rc.store)
 	restarted.status = "ready"
 	restarted.nctx = 4096
