@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T00:00:00.000Z",
+  "title": "Design System: tambo",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Madder", "canonical": "#e2622c", "tonalRamp": ["#3a1607", "#6b2a10", "#9c3d17", "#b8451a", "#d4571f", "#e2622c", "#ea7141", "#f4b394"] },
+      "ground": { "role": "neutral", "displayName": "Undyed Alpaca", "canonical": "#14100c", "tonalRamp": ["#0f0c09", "#14100c", "#1a1511", "#211b15", "#29221b", "#362d24", "#b5a897", "#f0e9df"] },
+      "text": { "role": "neutral", "displayName": "Bleached Linen", "canonical": "#f0e9df", "tonalRamp": ["#241b12", "#5d5041", "#7d6e5c", "#a8977f", "#b5a897", "#f0e9df", "#fdfaf4", "#fdfaf4"] },
+      "ok": { "role": "secondary", "displayName": "Signal Green", "canonical": "#4ac08a", "tonalRamp": ["#0e3a27", "#177a52", "#2b9a6b", "#4ac08a", "#6fd0a4", "#a9e4c9", "#d7f3e6", "#eefaf4"] },
+      "warn": { "role": "secondary", "displayName": "Lamp Amber", "canonical": "#e6b33f", "tonalRamp": ["#463407", "#8f6a12", "#b98c1c", "#e6b33f", "#efc86a", "#f5dda1", "#faeccd", "#fdf6e8"] },
+      "bad": { "role": "secondary", "displayName": "Signal Red", "canonical": "#d64556", "tonalRamp": ["#41101a", "#9c2133", "#b32a3d", "#d64556", "#e86a76", "#f0a0a8", "#f7ccd0", "#fdebec"] },
+      "info": { "role": "secondary", "displayName": "Cold Wire", "canonical": "#7a9cd8", "tonalRamp": ["#14233d", "#3a5e9e", "#5479bc", "#7a9cd8", "#a0b8e4", "#c6d4ef", "#e2e9f7", "#f2f5fb"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Stat Readout", "purpose": "32px bold numerals inside the fused stat strip only." },
+      "headline": { "displayName": "Pane Title", "purpose": "24px view titles (Downloads, Gateway, …)." },
+      "label": { "displayName": "Section Label", "purpose": "Mono uppercase keys trailed by a 1px rule; never a colored kicker." },
+      "data": { "displayName": "Data Mono", "purpose": "Every filename, size, port, pid, rate, command, log line." }
+    },
+    "shadows": [
+      { "name": "shadow-1", "value": "0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35)", "purpose": "Small lift for hovered raised elements." },
+      { "name": "shadow-2", "value": "0 2px 4px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45)", "purpose": "Elevation events: dialog, select popover, toast." },
+      { "name": "glow", "value": "0 0 0 1px rgba(226, 98, 44, 0.42), 0 2px 14px rgba(226, 98, 44, 0.25)", "purpose": "Accent-emphasized focus/lift." },
+      { "name": "scrim", "value": "rgba(15, 12, 9, 0.72)", "purpose": "Dialog overlay, tinted to the dark ground." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "All transitions and progress width." },
+      { "name": "t-fast", "value": "120ms", "purpose": "Border/color state changes." },
+      { "name": "t-med", "value": "200ms", "purpose": "Theme swap on background/color." },
+      { "name": "t-slow", "value": "320ms", "purpose": "Progress bar width." },
+      { "name": "blink", "value": "1.6s ease-in-out infinite (dot opacity to 0.35)", "purpose": "Warn/info badge dots; none under prefers-reduced-motion." },
+      { "name": "door", "value": "1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards", "purpose": "One-time ignition of the doorway mark's glow on boot." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1000px" },
+      { "name": "md", "value": "860px" },
+      { "name": "sm", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single madder action per region: Queue download, Launch server.",
+      "html": "<button class=\"ds-btn-primary\">Queue download</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; font: 600 14px/1 'Inter Variable', ui-sans-serif, system-ui, sans-serif; border-radius: 4px; padding: 10px 16px; border: 1px solid transparent; background: #e2622c; color: #1f0e05; cursor: pointer; transition: background 120ms; } .ds-btn-primary:hover { background: #ea7141; } .ds-btn-primary:active { background: #d4571f; transform: translateY(1px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Panel-local action on the raised neutral.",
+      "html": "<button class=\"ds-btn-secondary\">Health</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 8px; font: 600 14px/1 'Inter Variable', ui-sans-serif, system-ui, sans-serif; border-radius: 4px; padding: 10px 16px; border: 1px solid #362d24; background: #211b15; color: #f0e9df; cursor: pointer; transition: border-color 120ms, background 120ms; } .ds-btn-secondary:hover { border-color: rgba(226, 98, 44, 0.42); background: #29221b; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "34px square action at the edge of data rows (cancel, resume).",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Cancel\">✕</button>",
+      "css": ".ds-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 4px; border: 1px solid #362d24; background: #211b15; color: #b5a897; cursor: pointer; transition: border-color 120ms, color 120ms; } .ds-icon-btn:hover { border-color: rgba(226, 98, 44, 0.42); color: #f0e9df; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Recessed console-ground field; mono for paths and filenames.",
+      "html": "<input class=\"ds-input\" placeholder=\"owner/repo\" />",
+      "css": ".ds-input { width: 100%; font: 400 14px/1.4 'JetBrains Mono Variable', ui-monospace, monospace; color: #f0e9df; background: #0f0c09; border: 1px solid #362d24; border-radius: 4px; padding: 9px 12px; transition: border-color 120ms, box-shadow 120ms; } .ds-input:hover { border-color: #a8977f; } .ds-input:focus { outline: none; border-color: #e2622c; box-shadow: 0 0 0 3px rgba(226, 98, 44, 0.14); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The universal container: head strip with title left, mono meta right, 16px body.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-head\"><span class=\"ds-panel-title\">Jobs</span><span class=\"ds-panel-meta\">1 total</span></div><div class=\"ds-panel-body\">…</div></div>",
+      "css": ".ds-panel { background: #1a1511; border: 1px solid #362d24; border-radius: 6px; } .ds-panel-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #362d24; } .ds-panel-title { font: 600 14px/1.2 'Inter Variable', ui-sans-serif, sans-serif; color: #f0e9df; } .ds-panel-meta { margin-left: auto; font: 400 12px/1.2 'JetBrains Mono Variable', ui-monospace, monospace; color: #a8977f; font-variant-numeric: tabular-nums; } .ds-panel-body { padding: 16px; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-ok",
+      "description": "Semantic state pill-in-square: translucent fill, 6px square dot, color-mix border.",
+      "html": "<span class=\"ds-badge ds-badge-ok\">running</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 'Inter Variable', ui-sans-serif, sans-serif; padding: 5px 9px; border-radius: 2px; border: 1px solid transparent; white-space: nowrap; } .ds-badge::before { content: ''; width: 6px; height: 6px; border-radius: 0; background: currentColor; } .ds-badge-ok { background: rgba(74, 192, 138, 0.13); color: #4ac08a; border-color: rgba(74, 192, 138, 0.3); }"
+    },
+    {
+      "name": "Rail Item (Active)",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Left-rail navigation; active state is an accent wash, never a side stripe.",
+      "html": "<a class=\"ds-rail-item ds-active\" href=\"#/gateway\"><span>Gateway</span><span class=\"ds-count\">1</span></a>",
+      "css": ".ds-rail-item { display: flex; align-items: center; gap: 10px; width: 100%; font: 500 14px/1 'Inter Variable', ui-sans-serif, sans-serif; color: #b5a897; background: none; border: none; border-radius: 4px; padding: 9px 12px; cursor: pointer; text-align: left; transition: background 120ms, color 120ms; } .ds-rail-item:hover { background: #29221b; color: #f0e9df; } .ds-rail-item.ds-active { background: rgba(226, 98, 44, 0.14); color: #f0854f; } .ds-count { margin-left: auto; font: 500 12px/1 'JetBrains Mono Variable', ui-monospace, monospace; color: #a8977f; font-variant-numeric: tabular-nums; } .ds-active .ds-count { color: #f0854f; }"
+    },
+    {
+      "name": "Lit Doorway Mark",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "Brand signature: square frame, doorway glowing madder from within; ignites once on boot.",
+      "html": "<svg class=\"ds-mark\" viewBox=\"0 0 32 32\"><rect x=\"1\" y=\"1\" width=\"30\" height=\"30\" fill=\"#29221b\" stroke=\"#362d24\"/><path d=\"M10 27 v-9 a6 6 0 0 1 12 0 v9 z\" fill=\"#e2622c\" opacity=\"0.55\"/></svg>",
+      "css": ".ds-mark { width: 30px; height: 30px; display: block; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Waystation at Night",
+    "overview": "tambo is a control panel that feels like a dim machine room with one warm lamp on: a warm brown-tinted near-black ground, hairline borders doing the structural work, and a single committed madder-orange accent that appears only where the operator acts or a state demands attention. It is deliberately angular — a corner scale of 0/2/4/6 with 4px as the ceiling on controls and 6px on surfaces — so nothing reads pillowy or default-SaaS. Depth is real but quiet: offset-plus-blur shadows only on overlays; everything else stands on 1px hairlines against the ground. The light theme is the same dye lots dipped for daylight, not a separate palette.",
+    "keyCharacteristics": [
+      "Warm brown-black grounds (undyed alpaca), never blue-black slate",
+      "One accent: madder #e2622c; status colors stay distinct from it",
+      "Radius scale 0/2/4/6, pill reserved for toggle tracks only",
+      "Inter for UI, JetBrains Mono for all data with tabular numerals",
+      "Hand-drawn 1.5-stroke SVG icons only",
+      "Hairline borders convey structure; shadows reserved for elevation events"
+    ],
+    "rules": [
+      { "name": "The One Lamp Rule", "body": "Madder is the only brand hue; it stays on actions, active state, and data accents — status colors never borrow from it.", "section": "colors" },
+      { "name": "The Dye-Lot Rule", "body": "Both themes are the same palette family: a role changes value between themes, never meaning.", "section": "colors" },
+      { "name": "The Data Speaks Mono Rule", "body": "If it is a filename, size, port, pid, rate, or command, it is JetBrains Mono. Prose never is.", "section": "typography" },
+      { "name": "The Hairlines-First Rule", "body": "A border or a tonal step resolves separation; a box-shadow appears only when something genuinely floats above the page.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep every corner on the 0/2/4/6 scale; 4px on controls, 6px on surfaces.",
+      "Do set all data in JetBrains Mono with tabular numerals; keep prose in Inter.",
+      "Do convey structure with 1px hairlines on the tinted neutrals (#362d24 / #2a231c).",
+      "Do use translucent semantic fills for badges and callouts, color-mix at 30–32% for their borders.",
+      "Do darken the accent exactly one dip for the light theme (madder → #b8451a).",
+      "Do keep contrast at AA: accent-as-text uses #f0854f on dark, danger text #e86a76."
+    ],
+    "donts": [
+      "Don't introduce rounded-full or >6px radii on any control or surface (pill is toggle tracks only).",
+      "Don't use shadows for panel separation; that is hairline work.",
+      "Don't add icon fonts or third-party icon glyphs; draw 1.5-stroke SVGs only.",
+      "Don't tint grounds blue or grey; grounds are brown-tinted (#14100c family).",
+      "Don't use the accent for status; ok/warn/bad/info have their own dye lots.",
+      "Don't letter-case Inter as a faux label; labels are mono, uppercase, tracked 0.04em, trailed by a rule.",
+      "Don't render gradient text, glyph icons, or hard neobrutalist offset shadows."
+    ]
+  }
+}

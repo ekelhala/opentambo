@@ -1,0 +1,20 @@
+{
+  "purpose": "Verification evidence for the tambo reimplementation of the llama-desk web UI.",
+  "capturedAt": "2026-11-14",
+  "method": "chrome-devtools screenshots of the app served by the verification Go binary (/tmp/opencode/tambo-desk, UI embedded at compile time) at http://127.0.0.1:8097, with seeded local fixtures (fake-llama-server, tambo-models, tambo-data). No traffic left the machine.",
+  "shippingRasters": "none — the shipped UI carries zero raster images. The favicon (ui/public/favicon.svg) and all icons (ui/src/components/icons.tsx, DoorwayMark) are hand-drawn SVG authored for this build; the tambo wordmark is Inter text.",
+  "files": {
+    "desktop.png": { "view": "#/ (dashboard)", "viewport": "1440x900", "theme": "dark", "also": "user-1440.png (identical copy for the user-viewport capture)", "note": "recaptured after finish-review round 2 fixes; shows stacked storage bar (donut removed)" },
+    "mobile.png": { "view": "#/ (dashboard)", "viewport": "500x844", "theme": "dark", "note": "recaptured after round 2 fixes" },
+    "desktop-files.png": { "view": "#/files", "viewport": "1440x900", "theme": "dark" },
+    "desktop-downloads.png": { "view": "#/downloads", "viewport": "1440x900", "theme": "dark", "note": "recaptured after finish-review round 1 flagged a mislabeled file" },
+    "desktop-servers.png": { "view": "#/servers", "viewport": "1440x900", "theme": "dark", "note": "recaptured round 1; shows the seeded running run qwen2.5-7b on 127.0.0.1:8123" },
+    "desktop-detail.png": { "view": "#/server/<run-id>", "viewport": "1440x900", "theme": "dark", "note": "recaptured after round 2 fixes; Stop is now filled danger" },
+    "desktop-gateway.png": { "view": "#/gateway", "viewport": "1440x900", "theme": "dark", "note": "recaptured after round 2 fixes; served state with one real route" },
+    "desktop-launch-dialog.png": { "view": "launch dialog over #/servers", "viewport": "1440x900", "theme": "dark" },
+    "desktop-light.png": { "view": "#/ (dashboard)", "viewport": "1440x900", "theme": "light" },
+    "desktop-light-gateway.png": { "view": "#/gateway", "viewport": "1440x900", "theme": "light" },
+    "mobile-downloads.png": { "view": "#/downloads", "viewport": "500x844", "theme": "dark" }
+  },
+  "demoData": "All runs, jobs, and model rows come from locally seeded fixtures (one completed TinyLlama download job, three stub GGUFs, one work/ subdirectory, one fake llama-server process). Nothing in the captures is an invented claim about real models or traffic."
+}
