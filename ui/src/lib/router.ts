@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export type View = 'dashboard' | 'servers' | 'server' | 'downloads' | 'files'
+export type View = 'dashboard' | 'servers' | 'server' | 'downloads' | 'files' | 'gateway'
 
 export interface Route {
   view: View
@@ -8,7 +8,7 @@ export interface Route {
   id?: string
 }
 
-const VIEWS: View[] = ['dashboard', 'servers', 'server', 'downloads', 'files']
+const VIEWS: View[] = ['dashboard', 'servers', 'server', 'downloads', 'files', 'gateway']
 
 function parse(): Route {
   const parts = window.location.hash.replace(/^#\/?/, '').split('/')

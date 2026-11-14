@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import { Donut, type DonutSegment } from '@/components/donut'
 import { MeterRow } from '@/components/meter'
 import { AreaChart, BarChart, Sparkline } from '@/components/sparkline'
 import { ServerRow } from '@/views/servers'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { bytes } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import type { State } from '@/lib/api'
@@ -24,11 +22,10 @@ const CHIPS: { id: Series; label: string }[] = [
 ]
 
 const SEGMENT_COLORS = [
-  'var(--color-sky-500)',
-  'var(--color-emerald-500)',
-  'var(--color-violet-400)',
-  'var(--color-amber-500)',
-  'var(--color-zinc-500)',
+  'var(--t-accent)',
+  'var(--t-accent-ink)',
+  'var(--t-text-3)',
+  'var(--t-line)',
 ]
 
 export function DashboardView({ state, history }: { state: State; history: History }) {
@@ -50,169 +47,161 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         : `peak ${peak} jobs`
 
   return (
-    <div className="flex flex-1 flex-col gap-3.5">
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+    <div className="grid gap-5">
+      <div className="stat-grid">
         <Stat
-          label="Active servers"
-          value={`${running.length}`}
-          unit={`/ ${state.runs.length} managed`}
-          foot={
+          k="Active servers"
+          v={`${running.length}`}
+          u={`/ ${state.runs.length} managed`}
+          f={
             failed.length
-              ? `● ${running.length} live · ${failed.length} failed`
+              ? `${running.length} live · ${failed.length} failed`
               : running.length
-                ? `● ${running.length} healthy`
+                ? `${running.length} healthy`
                 : 'no managed processes'
           }
-          footClassName={failed.length ? 'text-destructive' : undefined}
+          fClass={failed.length ? 'is-bad' : running.length ? 'is-ok' : undefined}
         />
         <Stat
-          label="Aliases on /v1"
-          value={`${running.length}`}
-          foot={running.length ? running.map((r) => r.launch.name).join(' · ') : 'nothing serving yet'}
-          footMono
+          k="Aliases on /v1"
+          v={`${running.length}`}
+          f={running.length ? running.map((r) => r.launch.name).join(' · ') : 'nothing serving yet'}
         />
         <Stat
-          label="Downloads"
-          value={`${downloading.length}`}
-          unit={`/ ${state.settings.parallel_downloads} slots`}
-          foot={bandwidth > 0 ? `≈ ${bytes(bandwidth)}/s now` : 'idle'}
-          spark={
+          k="Downloads"
+          v={`${downloading.length}`}
+          u={`/ ${state.settings.parallel_downloads} slots`}
+          f={bandwidth > 0 ? `≈ ${bytes(bandwidth)}/s now` : 'idle'}
+          aside={
             <span className="block h-7 w-[110px] shrink-0">
-              <Sparkline values={history.bandwidth} className="text-sky-500" />
+              <Sparkline values={history.bandwidth} />
             </span>
           }
         />
-        <Stat
-          label="Model disk"
-          value={`${state.models.length}`}
-          unit={`· ${bytes(disk)}`}
-          foot={state.settings.models}
-          footMono
-        />
+        <Stat k="Model disk" v={`${state.models.length}`} u={`· ${bytes(disk)}`} f={state.settings.models} />
       </div>
 
-      <div className="grid flex-1 content-start gap-3.5 lg:grid-rows-[auto_1fr]">
-        <div className="grid gap-3.5 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex-row items-center">
-              <CardTitle>Activity</CardTitle>
-              <span className="ml-auto flex gap-0.5 rounded-lg border bg-secondary p-0.5">
-                {CHIPS.map((chip) => (
-                  <button
-                    key={chip.id}
-                    onClick={() => setSeries(chip.id)}
-                    aria-pressed={series === chip.id}
-                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                      series === chip.id
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </span>
-            </CardHeader>
-            <CardContent>
-              {series === 'jobs' ? (
-                <BarChart values={history.jobs} height={190} />
-              ) : series === 'running' ? (
-                <AreaChart values={history.running} height={190} className="text-emerald-500" />
-              ) : (
-                <AreaChart values={history.bandwidth} height={190} className="text-sky-500" />
-              )}
-              <div className="text-muted-foreground mt-2.5 flex justify-end font-mono text-xs">
-                {values.length > 1 ? peakLabel : 'collecting samples…'}
-              </div>
-            </CardContent>
-          </Card>
-          <div className="grid content-start gap-3.5">
-            <Card>
-              <CardHeader className="flex-row items-center">
-                <CardTitle>Model storage</CardTitle>
-                <span className="text-muted-foreground ml-auto text-xs font-normal normal-case tracking-normal">
-                  {state.models.length} files
-                </span>
-              </CardHeader>
-              <CardContent>
-                {disk > 0 ? (
-                  <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center lg:flex-col xl:flex-row">
-                    <Donut
-                      segments={diskSegments(state)}
-                      centerValue={bytes(disk).replace(/ \w+$/, '')}
-                      centerLabel={bytes(disk).split(' ')[1]}
-                      size={124}
-                    />
-                    <div className="grid w-full gap-2 text-xs">
-                      {diskSegments(state).map((s) => (
-                        <div key={s.label} className="text-muted-foreground flex items-center gap-2">
-                          <span className="size-2 shrink-0 rounded-sm" style={{ background: s.color }} />
-                          <span className="truncate">{s.label}</span>
-                          <span className="text-foreground ml-auto shrink-0 tabular-nums">{bytes(s.value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground py-6 text-center text-sm">No models on disk yet.</p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Manager</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MeterRow
-                  label="Servers"
-                  value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
-                  detail={`${running.length} / ${state.runs.length}`}
-                />
-                <MeterRow
-                  label="Downloads"
-                  value={
-                    state.settings.parallel_downloads
-                      ? (downloading.length / state.settings.parallel_downloads) * 100
-                      : 0
-                  }
-                  detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
-                  className="bg-sky-500"
-                />
-                <MeterRow
-                  label="Jobs open"
-                  value={state.jobs.length ? (activeJobs.length / state.jobs.length) * 100 : 0}
-                  detail={`${activeJobs.length} / ${state.jobs.length}`}
-                  className="bg-amber-500"
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        <div className="grid content-start gap-2.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">
-              Active servers
-            </h2>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <section className="panel lg:col-span-2">
+          <div className="panel-head">
+            <span className="panel-title">Activity</span>
             <span className="grow" />
-            <Button variant="outline" size="sm" onClick={() => navigate('servers')}>
-              Inspect →
-            </Button>
+            <span className="seg">
+              {CHIPS.map((chip) => (
+                <button key={chip.id} onClick={() => setSeries(chip.id)} aria-pressed={series === chip.id}>
+                  {chip.label}
+                </button>
+              ))}
+            </span>
           </div>
+          <div className="panel-body">
+            {series === 'jobs' ? (
+              <BarChart values={history.jobs} height={190} />
+            ) : (
+              <AreaChart values={series === 'running' ? history.running : history.bandwidth} height={190} />
+            )}
+            <div className="num mt-2.5 flex justify-end text-xs text-[var(--t-text-3)]">
+              {values.length > 1 ? peakLabel : 'collecting samples…'}
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <span className="panel-title">Model storage</span>
+            <span className="panel-meta">{bytes(disk)} · {state.models.length} files</span>
+          </div>
+          <div className="panel-body">
+            {disk > 0 ? (
+              <div className="grid gap-3.5">
+                <div className="progress stacked" aria-hidden="true">
+                  {diskSegments(state).map((s) => (
+                    <i
+                      key={s.label}
+                      style={{ width: `${(s.value / disk) * 100}%`, background: s.color }}
+                      title={`${s.label} — ${bytes(s.value)}`}
+                    />
+                  ))}
+                </div>
+                <div className="grid gap-2 text-xs">
+                  {diskSegments(state).map((s) => (
+                    <div key={s.label} className="flex items-center gap-2 text-[var(--t-text-2)]">
+                      <span className="size-2 shrink-0" style={{ background: s.color }} />
+                      <span className="truncate">{s.label}</span>
+                      <span className="num ml-auto shrink-0 text-[var(--t-text)]">{bytes(s.value)}</span>
+                      <span className="num w-10 shrink-0 text-right text-[var(--t-text-3)]">
+                        {((s.value / disk) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="py-6 text-center text-sm text-[var(--t-text-2)]">No models on disk yet.</p>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <span className="panel-title">Manager</span>
+          <span className="panel-meta">capacity in use</span>
+        </div>
+        <div className="panel-body grid gap-x-8 md:grid-cols-3">
+          <MeterRow
+            label="Servers"
+            value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
+            detail={`${running.length} / ${state.runs.length}`}
+            tone="ok"
+          />
+          <MeterRow
+            label="Downloads"
+            value={
+              state.settings.parallel_downloads
+                ? (downloading.length / state.settings.parallel_downloads) * 100
+                : 0
+            }
+            detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
+            tone="info"
+          />
+          <MeterRow
+            label="Jobs open"
+            value={state.jobs.length ? (activeJobs.length / state.jobs.length) * 100 : 0}
+            detail={`${activeJobs.length} / ${state.jobs.length}`}
+            tone="warn"
+          />
+        </div>
+      </section>
+
+      <div>
+        <div className="sub-label mb-3.5">Servers on this host</div>
+        <div className="grid gap-2.5">
           {running.length ? (
             running.map((run) => <ServerRow key={run.id} run={run} />)
           ) : (
-            <p className="text-muted-foreground rounded-xl border border-dashed py-8 text-center text-sm">
+            <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
               No servers serving right now.
             </p>
           )}
+        </div>
+        <div className="mt-3.5 flex justify-end">
+          <Button variant="secondary" size="sm" onClick={() => navigate('servers')}>
+            All servers →
+          </Button>
         </div>
       </div>
     </div>
   )
 }
 
-function diskSegments(state: State): DonutSegment[] {
+interface DiskSegment {
+  label: string
+  value: number
+  color: string
+}
+
+function diskSegments(state: State): DiskSegment[] {
   const byDir = new Map<string, number>()
   for (const model of state.models) {
     const dir = model.path.includes('/') ? model.path.split('/')[0] : '(root)'
@@ -226,49 +215,39 @@ function diskSegments(state: State): DonutSegment[] {
     segments.push({
       label: `${rest.length} other`,
       value: rest.reduce((sum, [, v]) => sum + v, 0),
-      color: 'var(--secondary)',
+      color: 'var(--t-text-3)',
     })
   return segments
 }
 
 function Stat({
-  label,
-  value,
-  unit,
-  foot,
-  footMono,
-  footClassName,
-  spark,
+  k,
+  v,
+  u,
+  f,
+  fClass,
+  aside,
 }: {
-  label: string
-  value: string
-  unit?: string
-  foot?: string
-  footMono?: boolean
-  footClassName?: string
-  spark?: React.ReactNode
+  k: string
+  v: string
+  u?: string
+  f?: string
+  fClass?: string
+  aside?: React.ReactNode
 }) {
   return (
-    <Card className="py-4">
-      <CardContent className="px-4">
-        <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-          {label}
+    <div className="stat">
+      <div className="k">{k}</div>
+      <div className="v">
+        {v}
+        {u && <span className="u">{u}</span>}
+      </div>
+      {(f || aside) && (
+        <div className="f-row">
+          <span className={`f ${fClass ?? ''}`}>{f}</span>
+          {aside}
         </div>
-        <div className="mt-1.5 truncate text-[26px] leading-none font-semibold tracking-tight tabular-nums">
-          {value}
-          {unit && <span className="text-muted-foreground ml-1 text-[13px] font-medium">{unit}</span>}
-        </div>
-        {(foot || spark) && (
-          <div className="mt-3 flex items-end justify-between gap-2.5">
-            <span
-              className={`text-muted-foreground truncate text-xs tabular-nums ${footMono ? 'font-mono' : ''} ${footClassName ?? ''}`}
-            >
-              {foot}
-            </span>
-            {spark}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }

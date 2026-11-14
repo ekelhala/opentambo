@@ -1,14 +1,8 @@
-// Small dependency-free area chart, like the mockup's inline SVG.
-export function Sparkline({
-  values,
-  height = 28,
-  className,
-}: {
-  values: number[]
-  height?: number
-  className?: string
-}) {
-  if (values.length < 2) return <div style={{ height }} className={className} />
+// Dependency-free SVG charts, drawn in the tambo stroke language:
+// one accent hairline, hairline grid, no gradients.
+
+export function Sparkline({ values, height = 28 }: { values: number[]; height?: number }) {
+  if (values.length < 2) return <div style={{ height }} />
   const width = 120
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -23,12 +17,12 @@ export function Sparkline({
     <svg
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      className={className}
-      style={{ width: '100%', height }}
+      className="block w-full"
+      style={{ height }}
       aria-hidden
     >
-      <path d={`${line} L ${width} ${height} L 0 ${height} Z`} fill="currentColor" opacity={0.12} />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      <path d={`${line} L ${width} ${height} L 0 ${height} Z`} className="chart-area" />
+      <path d={line} className="chart-line" />
     </svg>
   )
 }
@@ -36,8 +30,8 @@ export function Sparkline({
 export function BarChart({ values, height = 190 }: { values: number[]; height?: number }) {
   if (values.length < 2)
     return (
-      <div style={{ height }} className="text-muted-foreground grid place-items-center text-xs">
-        No samples yet
+      <div style={{ height }} className="grid place-items-center text-xs text-[var(--t-text-3)]">
+        collecting samples…
       </div>
     )
   const width = 640
@@ -49,7 +43,6 @@ export function BarChart({ values, height = 190 }: { values: number[]; height?: 
       preserveAspectRatio="none"
       style={{ width: '100%', height }}
       aria-hidden
-      className="text-amber-500"
     >
       {values.map((v, i) => {
         const h = (v / max) * (height - 8)
@@ -60,9 +53,8 @@ export function BarChart({ values, height = 190 }: { values: number[]; height?: 
             y={height - h}
             width={bw * 0.64}
             height={Math.max(h, 1)}
-            rx={1.5}
-            fill="currentColor"
-            opacity={0.35 + (0.65 * v) / max}
+            className="chart-bar"
+            opacity={0.3 + (0.7 * v) / max}
           />
         )
       })}
@@ -70,19 +62,11 @@ export function BarChart({ values, height = 190 }: { values: number[]; height?: 
   )
 }
 
-export function AreaChart({
-  values,
-  height = 150,
-  className = 'text-sky-500',
-}: {
-  values: number[]
-  height?: number
-  className?: string
-}) {
+export function AreaChart({ values, height = 150 }: { values: number[]; height?: number }) {
   if (values.length < 2)
     return (
-      <div style={{ height }} className="text-muted-foreground grid place-items-center text-xs">
-        No samples yet
+      <div style={{ height }} className="grid place-items-center text-xs text-[var(--t-text-3)]">
+        collecting samples…
       </div>
     )
   const width = 640
@@ -98,7 +82,6 @@ export function AreaChart({
       preserveAspectRatio="none"
       style={{ width: '100%', height }}
       aria-hidden
-      className={className}
     >
       {[0.25, 0.5, 0.75].map((f) => (
         <line
@@ -107,12 +90,11 @@ export function AreaChart({
           x2={width}
           y1={height * f}
           y2={height * f}
-          stroke="var(--border)"
-          vectorEffect="non-scaling-stroke"
+          className="chart-grid"
         />
       ))}
-      <path d={`${line} L ${width} ${height} L 0 ${height} Z`} fill="currentColor" opacity={0.12} />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      <path d={`${line} L ${width} ${height} L 0 ${height} Z`} className="chart-area" />
+      <path d={line} className="chart-line" />
     </svg>
   )
 }

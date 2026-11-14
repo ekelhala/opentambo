@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { DoorwayMark, GearIcon, MoonIcon, PlayIcon, SunIcon } from '@/components/icons'
 import { LaunchDialog, type LaunchDraft } from '@/components/launch-dialog'
 import { NavRail } from '@/components/nav-rail'
 import {
@@ -15,11 +16,11 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
 import { Toaster } from '@/components/ui/sonner'
 import { api, type ModelFile, type Run, type State } from '@/lib/api'
 import { bytes } from '@/lib/format'
@@ -27,9 +28,9 @@ import { useHashRoute } from '@/lib/router'
 import { DashboardView, type History } from '@/views/dashboard'
 import { DownloadsView } from '@/views/downloads'
 import { FilesView } from '@/views/files'
+import { GatewayView } from '@/views/gateway'
 import { ServerDetail } from '@/views/server-detail'
 import { ServersView } from '@/views/servers'
-import { InfoIcon, MoonIcon, PlayIcon, SunIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 const EMPTY_STATE: State = {
@@ -40,14 +41,11 @@ const EMPTY_STATE: State = {
   profiles: {},
 }
 
-const TITLES: Record<string, [string, string]> = {
-  dashboard: ['Dashboard', 'Overview of servers, transfers and model storage'],
-  servers: ['Servers', 'Managed llama-server processes, logs and launch configuration'],
-  downloads: ['Downloads', 'Hugging Face transfers with resume, cancel and bounded parallelism'],
-  files: ['Model files', 'GGUF inventory, saved launch profiles and deletion'],
-}
-
 const HISTORY_LENGTH = 120
+
+function readTheme(): 'dark' | 'light' {
+  return localStorage.getItem('tambo-theme') === 'light' ? 'light' : 'dark'
+}
 
 export default function App() {
   const route = useHashRoute()
@@ -55,7 +53,7 @@ export default function App() {
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState<LaunchDraft | null>(null)
   const [deleting, setDeleting] = useState<ModelFile | null>(null)
-  const [dark, setDark] = useState(() => localStorage.getItem('ld-theme') !== 'light')
+  const [theme, setTheme] = useState<'dark' | 'light'>(readTheme)
   const [history, setHistory] = useState<History>({ bandwidth: [], running: [], jobs: [] })
 
   const refresh = useCallback(async () => {
@@ -75,15 +73,18 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    // polling the manager API is deliberate external-system sync; state lands
+    // asynchronously after each fetch, so no cascading render is triggered
+    // oxlint-disable-next-line react/set-state-in-effect
     refresh()
     const timer = setInterval(refresh, 2000)
     return () => clearInterval(timer)
   }, [refresh])
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('ld-theme', dark ? 'dark' : 'light')
-  }, [dark])
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('tambo-theme', theme)
+  }, [theme])
 
   const call = useCallback(
     async (path: string, method: string, body?: unknown, ok?: string) => {
@@ -100,76 +101,78 @@ export default function App() {
 
   const data = state ?? EMPTY_STATE
   const detailRun: Run | undefined = route.view === 'server' ? data.runs.find((r) => r.id === route.id) : undefined
-
-  const [title, subtitle] =
-    route.view === 'server'
-      ? detailRun
-        ? [detailRun.launch.name, `${detailRun.launch.model} · 127.0.0.1:${detailRun.launch.port}`]
-        : ['Server', 'Unknown run']
-      : TITLES[route.view]
+  const running = data.runs.filter((r) => r.status === 'running' || r.status === 'stopping')
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
-      <NavRail active={route.view} connected={connected} />
+    <div className="panel-shell">
+      <header className="masthead">
+        <DoorwayMark lit />
+        <h1 className="wordmark">tambo</h1>
+        <span className="tag">The waystation for your models</span>
+        <span className="grow" />
+        <SettingsDialog state={state} connected={connected} />
+        <Button onClick={() => setDraft({})} disabled={!state}>
+          <PlayIcon />
+          <span className="max-sm:hidden">Launch server</span>
+          <span className="sm:hidden">Launch</span>
+        </Button>
+        <button
+          className="theme-toggle"
+          aria-label="Switch color theme"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
+          {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+          {theme === 'dark' ? 'Dark' : 'Light'}
+        </button>
+      </header>
 
-      <div className="flex min-h-0 min-w-0 grow flex-col">
-        <header className="bg-background flex min-h-14 shrink-0 items-center gap-3.5 border-b px-4 sm:px-6">
-          <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold tracking-tight">{title}</h1>
-            <p className="text-muted-foreground mt-px hidden truncate text-xs sm:block">{subtitle}</p>
-          </div>
-          <span className="grow" />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Toggle theme"
-            onClick={() => setDark(!dark)}
-          >
-            {dark ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
-          </Button>
-          <SettingsDialog state={state} connected={connected} />
-          <Button onClick={() => setDraft({})} disabled={!state}>
-            <PlayIcon className="size-4" />
-            <span className="max-sm:hidden">Launch server</span>
-            <span className="sm:hidden">Launch</span>
-          </Button>
-        </header>
+      <NavRail
+        active={route.view}
+        connected={connected}
+        counts={{
+          servers: running.length,
+          downloads: data.jobs.filter((j) => j.status === 'queued' || j.status === 'downloading').length,
+          files: data.models.length,
+          gateway: running.length,
+        }}
+      />
 
-        <main className="min-h-0 grow overflow-y-auto px-4 pt-5 pb-24 sm:px-6 md:pb-6">
-          <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col">
-            {state ? (
-              <>
-                {route.view === 'dashboard' && <DashboardView state={data} history={history} />}
-                {route.view === 'servers' && <ServersView runs={data.runs} />}
-                {route.view === 'server' && (
-                  <ServerDetail
-                    run={detailRun}
-                    onChanged={refresh}
-                    onRelaunch={(run) => setDraft({ launch: run.launch })}
-                  />
-                )}
-                {route.view === 'downloads' && (
-                  <DownloadsView
-                    state={data}
-                    bandwidth={history.bandwidth}
-                    onSubmit={(body) => call('downloads', 'POST', body, 'Queued')}
-                    onCall={call}
-                  />
-                )}
-                {route.view === 'files' && (
-                  <FilesView state={data} onLaunch={(model) => setDraft({ model })} onDelete={setDeleting} />
-                )}
-              </>
-            ) : (
-              <p className="text-muted-foreground py-16 text-center text-sm">
-                {connected ? 'Loading…' : 'Cannot reach the llama-desk API. Is the manager running?'}
-              </p>
-            )}
-          </div>
-        </main>
-      </div>
+      <main className="stage">
+        <div className="pane">
+          {state ? (
+            <>
+              {route.view === 'dashboard' && <DashboardView state={data} history={history} />}
+              {route.view === 'servers' && <ServersView runs={data.runs} />}
+              {route.view === 'server' && (
+                <ServerDetail
+                  key={route.id}
+                  run={detailRun}
+                  onChanged={refresh}
+                  onRelaunch={(run) => setDraft({ launch: run.launch })}
+                />
+              )}
+              {route.view === 'downloads' && (
+                <DownloadsView
+                  state={data}
+                  bandwidth={history.bandwidth}
+                  onSubmit={(body) => call('downloads', 'POST', body, 'Queued')}
+                  onCall={call}
+                />
+              )}
+              {route.view === 'files' && (
+                <FilesView state={data} onLaunch={(model) => setDraft({ model })} onDelete={setDeleting} />
+              )}
+              {route.view === 'gateway' && <GatewayView state={data} />}
+            </>
+          ) : (
+            <p className="py-16 text-center text-sm text-[var(--t-text-2)]">
+              {connected ? 'Loading…' : 'Cannot reach the tambo API. Is the manager running?'}
+            </p>
+          )}
+        </div>
+      </main>
 
-      <Toaster theme={dark ? 'dark' : 'light'} />
+      <Toaster theme={theme} />
       {state && draft && (
         <LaunchDialog
           key={JSON.stringify(draft)}
@@ -182,15 +185,14 @@ export default function App() {
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete model?</AlertDialogTitle>
-            <AlertDialogDescription className="font-mono text-xs break-all">
+            <AlertDialogTitle className="dialog-title">Delete model?</AlertDialogTitle>
+            <AlertDialogDescription className="mono mt-2 text-xs break-anywhere text-[var(--t-text-2)]">
               {deleting ? `${deleting.path} · ${bytes(deleting.size)}` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() =>
                 deleting &&
                 call(`models?path=${encodeURIComponent(deleting.path)}`, 'DELETE', undefined, 'Deleted')
@@ -209,13 +211,16 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Configuration">
-          <InfoIcon className="size-4" />
-        </Button>
+        <button className="icon-btn" aria-label="Configuration">
+          <GearIcon />
+        </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>Configuration</DialogTitle>
+          <DialogTitle className="dialog-title">Configuration</DialogTitle>
+          <DialogDescription className="dialog-lede">
+            How this manager was started. Files are the inventory; state lives beside them.
+          </DialogDescription>
         </DialogHeader>
         {state && (
           <div className="grid gap-2 text-xs">
@@ -223,13 +228,15 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
             <SettingRow label="llama-server" value={state.settings.binary} />
             <SettingRow label="Downloads" value={`${state.settings.parallel_downloads} parallel`} />
             <SettingRow label="API" value={connected ? 'connected' : 'unreachable'} />
-            <Separator className="my-1" />
-            <p className="text-muted-foreground">
-              Gateway: <span className="font-mono">GET /v1/models</span> ·{' '}
-              <span className="font-mono">POST /v1/chat/completions</span> routed by model name.
-            </p>
           </div>
         )}
+        <div className="callout callout-info mt-5">
+          <p>
+            <strong>This panel deletes models and runs your runtime.</strong> It ships without
+            authentication on purpose: access control belongs to your Pangolin policy, not to a
+            second login nobody trusts.
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -238,8 +245,8 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-mono break-all">{value}</span>
+      <span className="text-[var(--t-text-3)]">{label}</span>
+      <span className="mono text-right break-anywhere">{value}</span>
     </div>
   )
 }

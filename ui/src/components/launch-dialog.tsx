@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PlayIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -7,8 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -16,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { api, type Launch, type State } from '@/lib/api'
 import { bytes, shellQuote } from '@/lib/format'
 import { toast } from 'sonner'
@@ -109,11 +107,14 @@ export function LaunchDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Launch server</DialogTitle>
+          <DialogTitle className="dialog-title">Launch server</DialogTitle>
+          <p className="dialog-lede">
+            Your binary, your arguments. The command below is exactly what runs.
+          </p>
         </DialogHeader>
         <form onSubmit={submit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="launch-model">Model</Label>
+          <div className="field">
+            <label htmlFor="launch-model">Model</label>
             <Select value={model} onValueChange={setModel} required>
               <SelectTrigger id="launch-model" className="w-full">
                 <SelectValue placeholder="Select a GGUF file" />
@@ -121,26 +122,29 @@ export function LaunchDialog({
               <SelectContent>
                 {state.models.map((m) => (
                   <SelectItem key={m.path} value={m.path}>
-                    {m.path} <span className="text-muted-foreground">· {bytes(m.size)}</span>
+                    {m.path}
+                    <span className="select-item-meta">{bytes(m.size)}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="launch-name">API model name</Label>
-            <Input
+          <div className="field">
+            <label htmlFor="launch-name">API model name</label>
+            <input
               id="launch-name"
+              className="input mono"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={model.split('/').pop()?.replace(/\.gguf$/i, '')}
             />
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="launch-context">Context</Label>
-              <Input
+            <div className="field">
+              <label htmlFor="launch-context">Context</label>
+              <input
                 id="launch-context"
+                className="input num"
                 type="number"
                 min={1}
                 required
@@ -148,10 +152,11 @@ export function LaunchDialog({
                 onChange={(e) => setContext(e.target.value)}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="launch-gpu">GPU layers</Label>
-              <Input
+            <div className="field">
+              <label htmlFor="launch-gpu">GPU layers</label>
+              <input
                 id="launch-gpu"
+                className="input num"
                 type="number"
                 min={0}
                 required
@@ -159,10 +164,11 @@ export function LaunchDialog({
                 onChange={(e) => setGpu(e.target.value)}
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="launch-port">Port</Label>
-              <Input
+            <div className="field">
+              <label htmlFor="launch-port">Port</label>
+              <input
                 id="launch-port"
+                className="input num"
                 type="number"
                 min={1024}
                 max={65535}
@@ -172,42 +178,40 @@ export function LaunchDialog({
               />
             </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="launch-args">Arguments</Label>
-            <Textarea
+          <div className="field">
+            <label htmlFor="launch-args">Arguments</label>
+            <textarea
               id="launch-args"
+              className="textarea mono"
               rows={3}
-              className="font-mono text-xs"
               value={args}
               onChange={(e) => setArgs(e.target.value)}
               placeholder={'--parallel\n1\n--jinja'}
               spellCheck={false}
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="launch-env">Environment</Label>
-            <Textarea
+          <div className="field">
+            <label htmlFor="launch-env">Environment</label>
+            <textarea
               id="launch-env"
+              className="textarea mono"
               rows={2}
-              className="font-mono text-xs"
               value={env}
               onChange={(e) => setEnv(e.target.value)}
               placeholder="CUDA_VISIBLE_DEVICES=0"
               spellCheck={false}
             />
           </div>
-          <div className="grid gap-2">
-            <Label>Command</Label>
-            <pre className="bg-muted overflow-x-auto rounded-md p-2.5 font-mono text-xs break-all whitespace-pre-wrap">
-              {command}
-            </pre>
+          <div className="field">
+            <span className="f-label">Command</span>
+            <pre className="well wrap">{command}</pre>
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !model}>
-              Launch
+              <PlayIcon /> {busy ? 'Launching…' : 'Launch'}
             </Button>
           </DialogFooter>
         </form>
