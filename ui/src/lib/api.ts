@@ -1,3 +1,39 @@
+export interface PromptCacheSpec {
+  enabled: boolean
+  max_bytes?: number
+  max_entry_bytes?: number
+  ttl_seconds?: number
+  min_reuse_tokens?: number
+}
+
+export interface CacheStats {
+  requests: number
+  hits: number
+  misses: number
+  live_kept: number
+  bypassed: number
+  saves: number
+  save_failures: number
+  restores: number
+  restore_failures: number
+  queue_timeouts: number
+  restore_ms_total: number
+  save_ms_total: number
+  bytes_restored: number
+  bytes_saved: number
+}
+
+export interface CacheView {
+  requested: boolean
+  status: 'pending' | 'ready' | 'unsupported' | string
+  namespace?: string
+  build?: string
+  reason?: string
+  min_reuse_tokens?: number
+  max_bytes?: number
+  stats?: CacheStats
+}
+
 export interface Launch {
   name: string
   model: string
@@ -6,6 +42,7 @@ export interface Launch {
   port: number
   args: string[]
   env: Record<string, string>
+  prompt_cache?: PromptCacheSpec
 }
 
 export interface Run {
@@ -17,6 +54,7 @@ export interface Run {
   started: string
   ended?: string
   error?: string
+  cache?: CacheView
 }
 
 export interface Job {

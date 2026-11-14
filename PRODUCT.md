@@ -37,6 +37,7 @@ Confirmed capabilities (first working slice):
 - Models: recursive directory scan (symlinks excluded), path/size/mtime plus saved launch settings per file; explicit delete.
 - Servers: launch with context, GPU layers, port, extra args (one argument per line, no shell evaluation), env overrides (`NAME=value`); PID, state, bounded live logs, explicit Health action, exact argument vector shown; graceful stop then kill after 5s; run-again reopens saved form.
 - Gateway: `GET /v1/models` and `POST /v1/chat/completions|/v1/completions|/v1/embeddings|/v1/responses` proxied by `model` field; payload, SSE streams, and error statuses pass through; caller disconnect cancels upstream; 32 MiB request cap, 10-minute header wait, no total stream limit, no automatic retries; gateway auth headers/cookies stripped before forwarding.
+- Prompt cache (opt-in per launch): disk-backed KV slot save/restore for one completion per request on chat/completions endpoints; token-prefix matching via the child's own apply-template/tokenize; namespace keyed to model contents + binary + state-affecting settings; quota/TTL/LRU with pins; capability probe gates each run (status visible in state and UI); management API under `/api/cache`.
 
 Deliberate boundaries (documented in README; future work must not quietly cross them):
 

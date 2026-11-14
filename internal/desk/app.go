@@ -34,6 +34,7 @@ type App struct {
 	jobs                 map[string]*Job
 	runs                 map[string]*Run
 	profiles             map[string]Launch
+	cacheStores          map[string]*cacheStore
 	slots                chan struct{}
 	ctx                  context.Context
 	cancel               context.CancelFunc
@@ -41,6 +42,7 @@ type App struct {
 	closeOnce            sync.Once
 	client               *http.Client
 	proxyTransport       *http.Transport
+	cacheClient          *http.Client
 }
 type savedState struct {
 	Jobs     map[string]*Job   `json:"jobs"`
@@ -70,8 +72,11 @@ func New(models, binary, data string, parallel int) (*App, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &App{models: models, binary: binary, data: data, jobs: map[string]*Job{}, runs: map[string]*Run{}, profiles: map[string]Launch{}, slots: make(chan struct{}, parallel), ctx: ctx, cancel: cancel, client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 30 * time.Second}}}
+	a := &App{models: models, binary: binary, data: data, jobs: map[string]*Job{}, runs: map[string]*Run{}, profiles: map[string]Launch{}, cacheStores: map[string]*cacheStore{}, slots: make(chan struct{}, parallel), ctx: ctx, cancel: cancel, client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 30 * time.Second}}}
 	a.proxyTransport = &http.Transport{ResponseHeaderTimeout: 10 * time.Minute}
+	// Control-plane calls to children (slot save/restore) can legitimately
+	// take a while on large KV caches; they never go through a proxy.
+	a.cacheClient = &http.Client{Transport: &http.Transport{Proxy: nil, ResponseHeaderTimeout: 5 * time.Minute}}
 	contents, err := os.ReadFile(filepath.Join(data, "state.json"))
 	if err == nil {
 		var state savedState
@@ -155,6 +160,9 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/runs/{id}/stop", a.stopRun)
 	mux.HandleFunc("GET /api/runs/{id}/logs", a.logs)
 	mux.HandleFunc("GET /api/runs/{id}/health", a.health)
+	mux.HandleFunc("GET /api/cache", a.cacheSummary)
+	mux.HandleFunc("DELETE /api/cache/{id}", a.cacheDelete)
+	mux.HandleFunc("POST /api/cache/prune", a.cachePrune)
 	mux.HandleFunc("DELETE /api/models", a.deleteModel)
 	mux.HandleFunc("GET /v1/models", a.proxyModels)
 	for _, endpoint := range []string{"chat/completions", "completions", "embeddings", "responses"} {
@@ -190,6 +198,12 @@ func (a *App) Handler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// runView extends a Run with the live prompt-cache summary for /api/state.
+type runView struct {
+	*Run
+	Cache *CacheSummary `json:"cache,omitempty"`
 }
 
 func (a *App) inventory() ([]Model, error) {
@@ -257,12 +271,17 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 		jobs = append(jobs, j)
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].Created.After(jobs[j].Created) })
-	runs := []*Run{}
+	runs := []runView{}
 	for _, run := range a.runs {
-		runs = append(runs, run)
+		view := runView{Run: run}
+		if run.cache != nil {
+			summary := run.cache.summary()
+			view.Cache = &summary
+		}
+		runs = append(runs, view)
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].Started.After(runs[j].Started) })
-	respond(w, 200, map[string]any{"settings": map[string]any{"models": a.models, "binary": a.binary, "parallel_downloads": cap(a.slots)}, "models": models, "catalog": catalogFrom(models), "jobs": jobs, "runs": runs, "profiles": a.profiles})
+	respond(w, 200, map[string]any{"settings": map[string]any{"models": a.models, "binary": a.binary, "parallel_downloads": cap(a.slots), "prompt_cache_defaults": map[string]any{"enabled": false, "max_bytes": defaultCacheMaxBytes, "max_entry_bytes": defaultCacheMaxEntryBytes, "ttl_seconds": defaultCacheTTLSeconds, "min_reuse_tokens": defaultCacheMinReuseTokens}}, "models": models, "catalog": catalogFrom(models), "jobs": jobs, "runs": runs, "profiles": a.profiles})
 }
 
 func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {

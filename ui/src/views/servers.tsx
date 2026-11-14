@@ -1,8 +1,21 @@
 import { ChevronRightIcon } from '@/components/icons'
 import { StatusPill } from '@/components/status-pill'
-import { type Run } from '@/lib/api'
+import { type CacheView, type Run } from '@/lib/api'
 import { uptime } from '@/lib/format'
 import { navigate } from '@/lib/router'
+
+export function CacheBadge({ cache }: { cache?: CacheView }) {
+  if (!cache?.requested) return null
+  if (cache.status === 'ready')
+    return <span className="badge shrink-0">cache</span>
+  if (cache.status === 'pending')
+    return <span className="badge badge-info shrink-0">cache…</span>
+  return (
+    <span className="badge badge-warn shrink-0" title={cache.reason}>
+      no cache
+    </span>
+  )
+}
 
 function runRank(run: Run): number {
   return run.status === 'running' ? 0 : run.status === 'stopping' ? 1 : 2
@@ -23,6 +36,7 @@ export function ServerRow({ run }: { run: Run }) {
             <span className="num rounded-[var(--t-r-1)] border border-[var(--t-line)] bg-[var(--t-bg-deep)] px-1.5 py-0.5 text-xs text-[var(--t-text-2)]">
               :{run.launch.port}
             </span>
+            <CacheBadge cache={run.cache} />
           </span>
           <span className="mono mt-0.5 flex flex-wrap gap-x-3.5 gap-y-0.5 text-xs text-[var(--t-text-3)]">
             <span className="truncate">{run.launch.model}</span>

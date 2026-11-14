@@ -18,13 +18,14 @@ import (
 )
 
 type Launch struct {
-	Name      string            `json:"name"`
-	Model     string            `json:"model"`
-	Context   int               `json:"context"`
-	GPULayers int               `json:"gpu_layers"`
-	Port      int               `json:"port"`
-	Args      []string          `json:"args"`
-	Env       map[string]string `json:"env"`
+	Name        string            `json:"name"`
+	Model       string            `json:"model"`
+	Context     int               `json:"context"`
+	GPULayers   int               `json:"gpu_layers"`
+	Port        int               `json:"port"`
+	Args        []string          `json:"args"`
+	Env         map[string]string `json:"env"`
+	PromptCache *PromptCache      `json:"prompt_cache,omitempty"`
 }
 type Run struct {
 	ID      string     `json:"id"`
@@ -38,6 +39,7 @@ type Run struct {
 	stop    context.CancelFunc
 	ctx     context.Context
 	log     *logBuffer
+	cache   *RunCache
 }
 type logBuffer struct {
 	mu   sync.Mutex
@@ -60,6 +62,19 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	if err := decode(w, r, &spec); err != nil {
 		fail(w, err)
 		return
+	}
+	if err := spec.PromptCache.validate(); err != nil {
+		fail(w, err)
+		return
+	}
+	// Namespace derivation hashes model files; keep that work outside App.mu.
+	var cachePrep *cacheLaunch
+	if spec.PromptCache != nil && spec.PromptCache.Enabled {
+		var err error
+		if cachePrep, err = a.preparePromptCache(spec); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -113,6 +128,11 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	args := []string{"--model", model, "--ctx-size", strconv.Itoa(spec.Context), "--n-gpu-layers", strconv.Itoa(spec.GPULayers)}
+	if cachePrep != nil {
+		// The manager owns the slot save directory so snapshots survive runs
+		// with the same compatible namespace.
+		args = append(args, "--slot-save-path", cachePrep.dir+string(os.PathSeparator))
+	}
 	args = append(args, spec.Args...)
 	args = append(args, "--alias", spec.Name, "--host", "127.0.0.1", "--port", strconv.Itoa(spec.Port))
 	ctx, stop := context.WithCancel(a.ctx)
@@ -140,6 +160,9 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		cmd.Env = append(cmd.Env, k+"="+env[k])
 	}
 	run := &Run{ID: id(), Launch: spec, Command: append([]string{a.binary}, args...), Status: "running", Started: time.Now(), stop: stop, ctx: ctx, log: &logBuffer{}}
+	if cachePrep != nil {
+		run.cache = newRunCache(cachePrep.spec, cachePrep.namespace, newLlamaClient(spec.Port, a.cacheClient), cachePrep.store)
+	}
 	cmd.Stdout = run.log
 	cmd.Stderr = run.log
 	if err = cmd.Start(); err != nil {
@@ -152,6 +175,14 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	a.profiles[spec.Model] = spec
 	if err = a.save(); err != nil {
 		run.Error = "Launch settings could not be saved: " + err.Error()
+	}
+	if run.cache != nil {
+		a.workers.Add(1)
+		readyContext := ctx
+		go func() {
+			defer a.workers.Done()
+			run.cache.AwaitReady(readyContext)
+		}()
 	}
 	a.workers.Add(1)
 	go func() {

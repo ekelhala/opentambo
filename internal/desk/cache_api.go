@@ -1,0 +1,149 @@
+package desk
+
+// Prompt-cache management API. Responses expose sanitized metadata only:
+// snapshot bytes and prompt token IDs never leave the server.
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+)
+
+// cacheStoreFor opens (or returns the cached) store for a namespace directory.
+// Callers must not hold a.mu.
+func (a *App) cacheStoreFor(dir, namespace string, spec PromptCache) (*cacheStore, error) {
+	resolved, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	if a.cacheStores == nil {
+		a.cacheStores = map[string]*cacheStore{}
+	}
+	store := a.cacheStores[resolved]
+	a.mu.Unlock()
+	if store != nil {
+		return store, nil
+	}
+	opened, err := newCacheStore(resolved, namespace, spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds))
+	if err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	if existing := a.cacheStores[resolved]; existing != nil {
+		store = existing
+	} else {
+		store = opened
+		a.cacheStores[resolved] = store
+	}
+	a.mu.Unlock()
+	if store != opened {
+		return store, nil
+	}
+	return store, nil
+}
+
+// registryCacheStores returns every store the process knows about, opening
+// namespace directories that exist on disk but were not launched yet. Each
+// directory yields at most one store.
+func (a *App) registryCacheStores() []*cacheStore {
+	a.mu.Lock()
+	known := make(map[string]*cacheStore, len(a.cacheStores))
+	for dir, store := range a.cacheStores {
+		known[filepath.Clean(dir)] = store
+	}
+	root := filepath.Join(a.data, "prompt-cache")
+	a.mu.Unlock()
+	if items, err := os.ReadDir(root); err == nil {
+		for _, item := range items {
+			if !item.IsDir() {
+				continue
+			}
+			dir := filepath.Clean(filepath.Join(root, item.Name()))
+			if _, seen := known[dir]; seen {
+				continue
+			}
+			store, err := newCacheStore(dir, item.Name(), defaultCacheMaxBytes, defaultCacheMaxEntryBytes, secondsDuration(defaultCacheTTLSeconds))
+			if err != nil {
+				continue
+			}
+			a.mu.Lock()
+			if a.cacheStores == nil {
+				a.cacheStores = map[string]*cacheStore{}
+			}
+			if existing := a.cacheStores[dir]; existing != nil {
+				store = existing
+			} else {
+				a.cacheStores[dir] = store
+			}
+			a.mu.Unlock()
+			known[dir] = store
+		}
+	}
+	stores := make([]*cacheStore, 0, len(known))
+	for _, store := range known {
+		stores = append(stores, store)
+	}
+	sort.Slice(stores, func(i, j int) bool { return stores[i].namespace < stores[j].namespace })
+	return stores
+}
+
+func (a *App) cacheSummary(w http.ResponseWriter, r *http.Request) {
+	namespaces := []map[string]any{}
+	a.mu.Lock()
+	runs := make([]*Run, 0, len(a.runs))
+	for _, run := range a.runs {
+		runs = append(runs, run)
+	}
+	a.mu.Unlock()
+	for _, store := range a.registryCacheStores() {
+		entries, used, budget := store.Summary()
+		belongs := []map[string]any{}
+		for _, run := range runs {
+			if run.cache != nil && run.cache.store == store {
+				summary := run.cache.summary()
+				belongs = append(belongs, map[string]any{"run_id": run.ID, "model": run.Launch.Name, "run_status": run.Status, "cache": summary})
+			}
+		}
+		namespaces = append(namespaces, map[string]any{"namespace": store.namespace, "entries": entries, "bytes_used": used, "max_bytes": budget, "runs": belongs})
+	}
+	respond(w, 200, map[string]any{"namespaces": namespaces, "defaults": map[string]any{"max_bytes": defaultCacheMaxBytes, "max_entry_bytes": defaultCacheMaxEntryBytes, "ttl_seconds": defaultCacheTTLSeconds, "min_reuse_tokens": defaultCacheMinReuseTokens}})
+}
+
+func (a *App) cacheDelete(w http.ResponseWriter, r *http.Request) {
+	entryID := r.PathValue("id")
+	for _, store := range a.registryCacheStores() {
+		if !store.HasEntry(entryID) {
+			continue
+		}
+		deleted, err := store.Delete(entryID)
+		if err != nil {
+			respond(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		if !deleted {
+			http.NotFound(w, r)
+			return
+		}
+		respond(w, 200, map[string]bool{"deleted": true})
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func (a *App) cachePrune(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+	removed := 0
+	for _, store := range a.registryCacheStores() {
+		removed += store.Prune()
+	}
+	respond(w, 200, map[string]int{"removed": removed})
+}

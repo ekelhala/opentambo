@@ -73,6 +73,7 @@ export function LaunchDialog({
       .map(([k, v]) => `${k}=${v}`)
       .join('\n')
   )
+  const [promptCache, setPromptCache] = useState(Boolean(profile?.prompt_cache?.enabled))
   const [busy, setBusy] = useState(false)
 
   const specArgs = args.split('\n').map((s) => s.trim()).filter(Boolean)
@@ -118,6 +119,7 @@ export function LaunchDialog({
         port: Number(port),
         args: specArgs,
         env: envMap,
+        prompt_cache: { enabled: promptCache },
       } satisfies Launch)
       toast.success(`${specName} launched`)
       onLaunched()
@@ -240,6 +242,22 @@ export function LaunchDialog({
               spellCheck={false}
             />
           </div>
+          <label className="flex items-start gap-2.5 rounded-md border border-[var(--t-border)] p-3 text-xs">
+            <input
+              type="checkbox"
+              checked={promptCache}
+              onChange={(e) => setPromptCache(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="f-label">Persistent prompt cache</span>
+              <p className="mt-0.5 text-[var(--t-text-2)]">
+                Save and restore KV state on disk so conversations can resume across app switches
+                and server restarts. Serializes requests to this server and manages{' '}
+                <span className="mono">--slot-save-path</span> automatically.
+              </p>
+            </span>
+          </label>
           <div className="field">
             <span className="f-label">Command</span>
             <pre className="well wrap">{command}</pre>

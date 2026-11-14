@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { BackIcon, CopyIcon, PlayIcon, PulseIcon, StopIcon, WarnIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/status-pill'
+import { CacheBadge } from '@/views/servers'
 import { api, type Run } from '@/lib/api'
-import { date, uptime } from '@/lib/format'
+import { bytes, date, uptime } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import { toast } from 'sonner'
 
@@ -177,6 +178,8 @@ export function ServerDetail({
         </div>
       </div>
 
+      {run.cache?.requested && <CachePanel run={run} />}
+
       <div className="grid gap-3.5 lg:grid-cols-3">
         <div className="panel lg:col-span-1">
           <div className="panel-head">
@@ -195,8 +198,8 @@ export function ServerDetail({
             <ArgBlock
               label="Environment overrides"
               value={
-                Object.keys(run.launch.env).length
-                  ? Object.entries(run.launch.env).map(([k, v]) => `${k}=${v}`).join('\n')
+                Object.entries(run.launch.env || {}).length
+                  ? Object.entries(run.launch.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')
                   : '(none)'
               }
             />
@@ -224,6 +227,81 @@ function ArgBlock({ label, value, wrap }: { label: string; value: string; wrap?:
     <div className="grid gap-1">
       <span className="text-[var(--t-text-3)]">{label}</span>
       <pre className={wrap ? 'well wrap' : 'well nowrap'}>{value}</pre>
+    </div>
+  )
+}
+
+function CachePanel({ run }: { run: Run }) {
+  const cache = run.cache
+  if (!cache) return null
+  const stats = cache.stats
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <span className="panel-title">Prompt cache</span>
+        <CacheBadge cache={cache} />
+        <span className="panel-meta">
+          {cache.build ? `llama.cpp ${cache.build}` : ''}
+          {cache.namespace ? ` · ns ${cache.namespace}` : ''}
+        </span>
+      </div>
+      {cache.status === 'unsupported' && (
+        <div className="callout callout-bad m-3 mb-0">
+          <WarnIcon />
+          <p className="break-all">
+            <strong>Persistent cache unavailable for this build.</strong> {cache.reason || 'The capability probe failed.'} Requests still run normally.
+          </p>
+        </div>
+      )}
+      {cache.status === 'pending' && (
+        <p className="panel-body text-xs text-[var(--t-text-2)]">
+          Verifying save/restore capability with the child server…
+        </p>
+      )}
+      {cache.status === 'ready' && stats && (
+        <div className="panel-body">
+          <div className="stat-grid">
+            <div className="stat">
+              <span className="k">Disk hits</span>
+              <span className="v">
+                {stats.hits}
+                <span className="u">restored</span>
+              </span>
+              <span className="f">
+                {stats.restores} restores · {bytes(stats.bytes_restored)}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="k">Snapshots saved</span>
+              <span className="v">
+                {stats.saves}
+                <span className="u">published</span>
+              </span>
+              <span className="f">
+                {bytes(stats.bytes_saved)} written{stats.save_failures ? ` · ${stats.save_failures} failed` : ''}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="k">Live reuse</span>
+              <span className="v">
+                {stats.live_kept}
+                <span className="u">kept</span>
+              </span>
+              <span className="f">{stats.requests} coordinated requests</span>
+            </div>
+            <div className="stat">
+              <span className="k">Cold / bypassed</span>
+              <span className="v">
+                {stats.misses + stats.bypassed}
+                <span className="u">plain</span>
+              </span>
+              <span className="f">
+                {cache.min_reuse_tokens?.toLocaleString()} token min reuse · {stats.restore_failures} bad restores
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
