@@ -135,6 +135,87 @@ func TestPromptCacheIdentityDistinguishesFlagValueAssociations(t *testing.T) {
 	}
 }
 
+func TestPromptCacheIdentityEnvironmentSerializationIsUnambiguous(t *testing.T) {
+	a := testApp(t, t.TempDir()+"/llama-server")
+	if err := os.WriteFile(a.binary, []byte("binary-v1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	model := filepath.Join(a.models, "model.gguf")
+	writeMinimalGGUF(t, model)
+	base := Launch{Context: 8192, GPULayers: 99}
+
+	// Issue #20 reproduction: two valid, distinct process environments that
+	// newline-delimited "env=key=value" lines serialize identically.
+	one := base
+	one.Env = map[string]string{"A": "x\nenv=B=y"}
+	two := base
+	two.Env = map[string]string{"A": "x", "B": "y"}
+	first, err := a.promptCacheIdentity(model, "llama", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.promptCacheIdentity(model, "llama", two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("newline in an environment value merged into a second entry")
+	}
+	// Distinct keys whose names embed delimiters must not collide either.
+	three := base
+	three.Env = map[string]string{"A\nenv=B": "y"}
+	third, err := a.promptCacheIdentity(model, "llama", three)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third == first || third == second {
+		t.Fatal("delimiter-like environment key collided")
+	}
+	// Stability: identical environments keep the namespace stable.
+	repeat, err := a.promptCacheIdentity(model, "llama", two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repeat != second {
+		t.Fatal("identical environment configuration changed the namespace")
+	}
+}
+
+func TestPromptCacheIdentityArgvSerializationIsUnambiguous(t *testing.T) {
+	a := testApp(t, t.TempDir()+"/llama-server")
+	if err := os.WriteFile(a.binary, []byte("binary-v1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	model := filepath.Join(a.models, "model.gguf")
+	writeMinimalGGUF(t, model)
+	base := Launch{Context: 8192, GPULayers: 99}
+
+	// One argument containing a newline serializes like two arguments when
+	// argv is joined with unescaped "\n" line delimiters.
+	one := base
+	one.Args = []string{"x\narg=y"}
+	two := base
+	two.Args = []string{"x", "y"}
+	first, err := a.promptCacheIdentity(model, "llama", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.promptCacheIdentity(model, "llama", two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("newline in an argv value merged two arguments into one identity")
+	}
+	repeat, err := a.promptCacheIdentity(model, "llama", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repeat != first {
+		t.Fatal("identical argv changed the namespace")
+	}
+}
+
 func TestPromptCacheIdentityBindsAdapterContents(t *testing.T) {
 	a := testApp(t, t.TempDir()+"/llama-server")
 	if err := os.WriteFile(a.binary, []byte("binary-v1"), 0755); err != nil {

@@ -22,7 +22,19 @@ import (
 	"sync"
 )
 
-const identityHashTag = "opentambo-prompt-cache-identity-v2\n"
+const identityHashTag = "opentambo-prompt-cache-identity-v3\n"
+
+// hashIdentityField writes one length-prefixed field into the identity hash.
+// Newline-delimited key=value text is ambiguous: a value containing a newline
+// (valid in process environments and argv) can splice into the next field so
+// two distinct configurations hash alike (issue #20). Framing every field as
+// kind[len:value] pins each field's byte span, making the concatenation of
+// any sequence of fields injective.
+func hashIdentityField(h io.Writer, kind, value string) {
+	fmt.Fprintf(h, "%s[%d]:", kind, len(value))
+	_, _ = io.WriteString(h, value)
+	_, _ = io.WriteString(h, "\n")
+}
 
 // verifiedCacheArchitectures lists GGUF architectures that passed a real
 // save/restart/restore/reuse test against a supported llama-server build.
@@ -121,13 +133,14 @@ func (a *App) promptCacheIdentity(model, architecture string, spec Launch) (stri
 	sort.Strings(files)
 	hash := sha256.New()
 	hash.Write([]byte(identityHashTag))
-	fmt.Fprintf(hash, "arch=%s\n", architecture)
+	hashIdentityField(hash, "arch", architecture)
 	for _, file := range files {
 		digest, err := a.fileDigest(file)
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(hash, "file=%s:%s\n", filepath.Base(file), digest)
+		hashIdentityField(hash, "file", filepath.Base(file))
+		hashIdentityField(hash, "sha256", digest)
 	}
 	binaryPath, err := a.resolvedBinary()
 	if err != nil {
@@ -137,23 +150,29 @@ func (a *App) promptCacheIdentity(model, architecture string, spec Launch) (stri
 	if err != nil {
 		return "", err
 	}
-	fmt.Fprintf(hash, "binary=%s\n", digest)
+	hashIdentityField(hash, "binary", digest)
 	effective, err := a.stateAffectingArgs(spec)
 	if err != nil {
 		return "", err
 	}
+	// argv keeps its original order and flag/value adjacency; the length
+	// prefix means a value containing newlines cannot merge with the
+	// following argument.
 	for _, entry := range effective {
-		fmt.Fprintf(hash, "arg=%s\n", entry)
+		hashIdentityField(hash, "arg", entry)
 	}
 	// Environment overrides can change engine state in ways the manager
 	// cannot audit; any difference invalidates the namespace conservatively.
+	// Keys and values are framed separately so delimiter-like or multiline
+	// content in one environment cannot serialize into another (issue #20).
 	envKeys := make([]string, 0, len(spec.Env))
 	for key := range spec.Env {
 		envKeys = append(envKeys, key)
 	}
 	sort.Strings(envKeys)
 	for _, key := range envKeys {
-		fmt.Fprintf(hash, "env=%s=%s\n", key, spec.Env[key])
+		hashIdentityField(hash, "env-key", key)
+		hashIdentityField(hash, "env-value", spec.Env[key])
 	}
 	return hex.EncodeToString(hash.Sum(nil))[:16], nil
 }
