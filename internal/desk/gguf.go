@@ -159,6 +159,14 @@ func (r *ggufReader) valueOf(kind uint32) (any, error) {
 		var v uint64
 		err := binary.Read(r, binary.LittleEndian, &v)
 		return v, err
+	case 11:
+		var v int64
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
+	case 12:
+		var v float64
+		err := binary.Read(r, binary.LittleEndian, &v)
+		return v, err
 	default:
 		return nil, fmt.Errorf("unknown GGUF value type %d", kind)
 	}
