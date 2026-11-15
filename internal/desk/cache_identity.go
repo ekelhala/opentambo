@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -91,6 +92,17 @@ func verifiedArchitectureNames() []string {
 	return names
 }
 
+// resolvedBinary maps the configured llama-server executable to the absolute
+// path the OS would execute. A bare basename (the CLI default) resolves
+// through PATH exactly like exec.CommandContext does at launch; both the
+// launch path and cache identity hashing must agree on the same file.
+func (a *App) resolvedBinary() (string, error) {
+	if strings.ContainsRune(a.binary, os.PathSeparator) {
+		return filepath.Abs(a.binary)
+	}
+	return exec.LookPath(a.binary)
+}
+
 // promptCacheIdentity hashes model content (including split shards), the
 // llama-server binary, and the state-affecting launch configuration.
 func (a *App) promptCacheIdentity(model, architecture string, spec Launch) (string, error) {
@@ -117,7 +129,11 @@ func (a *App) promptCacheIdentity(model, architecture string, spec Launch) (stri
 		}
 		fmt.Fprintf(hash, "file=%s:%s\n", filepath.Base(file), digest)
 	}
-	digest, err := a.fileDigest(a.binary)
+	binaryPath, err := a.resolvedBinary()
+	if err != nil {
+		return "", fmt.Errorf("prompt cache cannot resolve the llama-server executable: %w", err)
+	}
+	digest, err := a.fileDigest(binaryPath)
 	if err != nil {
 		return "", err
 	}

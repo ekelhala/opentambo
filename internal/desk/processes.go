@@ -135,8 +135,16 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, spec.Args...)
 	args = append(args, "--alias", spec.Name, "--host", "127.0.0.1", "--port", strconv.Itoa(spec.Port))
+	// Resolve the executable exactly like the cache identity hashing does so
+	// a PATH basename and an absolute path launch the same binary that was
+	// (or would be) recorded in the namespace.
+	binaryPath, err := a.resolvedBinary()
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	ctx, stop := context.WithCancel(a.ctx)
-	cmd := exec.CommandContext(ctx, a.binary, args...)
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }
 	cmd.WaitDelay = 5 * time.Second
@@ -159,7 +167,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		cmd.Env = append(cmd.Env, k+"="+env[k])
 	}
-	run := &Run{ID: id(), Launch: spec, Command: append([]string{a.binary}, args...), Status: "running", Started: time.Now(), stop: stop, ctx: ctx, log: &logBuffer{}}
+	run := &Run{ID: id(), Launch: spec, Command: append([]string{binaryPath}, args...), Status: "running", Started: time.Now(), stop: stop, ctx: ctx, log: &logBuffer{}}
 	if cachePrep != nil {
 		run.cache = newRunCache(cachePrep.spec, cachePrep.namespace, newLlamaClient(spec.Port, a.cacheClient), cachePrep.store)
 	}
