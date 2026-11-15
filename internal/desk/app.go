@@ -291,7 +291,7 @@ func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, run := range a.runs {
 		if run.Status == "running" || run.Status == "stopping" {
-			if run.Launch.Model == rel {
+			if run.Launch.Model == rel || sameShardSet(rel, run.Launch.Model) {
 				fail(w, errors.New("stop the model server before deleting its file"))
 				return
 			}
@@ -302,6 +302,19 @@ func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]bool{"deleted": true})
+}
+
+// sameShardSet reports whether two model paths are members of one split GGUF
+// set: the llama.cpp naming convention shares the base name and shard total
+// across every file of the same quantization. All shards of a running model
+// are active assets, not just the first one passed to llama-server.
+func sameShardSet(a, b string) bool {
+	fa := shardPattern.FindStringSubmatch(filepath.Base(a))
+	fb := shardPattern.FindStringSubmatch(filepath.Base(b))
+	if fa == nil || fb == nil {
+		return false
+	}
+	return fa[1] == fb[1] && fa[2] == fb[2] && strings.EqualFold(filepath.Dir(a), filepath.Dir(b))
 }
 
 func getJSON(client *http.Client, ctx context.Context, url string) (int, json.RawMessage, error) {

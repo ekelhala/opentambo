@@ -281,3 +281,52 @@ func TestProcessLifecycleAndSavedProfile(t *testing.T) {
 		t.Fatal("lost saved launch profile")
 	}
 }
+
+func TestDeleteModelProtectsEveryRunningShard(t *testing.T) {
+	a := testApp(t, "unused")
+	const total = "00002"
+	shardNames := []string{
+		"Mixtral-Instruct-Q4_K_M-00001-of-" + total + ".gguf",
+		"Mixtral-Instruct-Q4_K_M-00002-of-" + total + ".gguf",
+		"other-model-Q4_K_M-00001-of-00001.gguf",
+		"plain-model.gguf",
+	}
+	for _, name := range shardNames {
+		if err := os.WriteFile(filepath.Join(a.models, name), []byte("GGUFshard"), 0640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register := func(model, status string) *Run {
+		run := &Run{ID: "run-" + model, Launch: Launch{Model: model, Name: "split"}, Status: status, Started: time.Now(), log: &logBuffer{}}
+		a.mu.Lock()
+		a.runs[run.ID] = run
+		a.mu.Unlock()
+		return run
+	}
+	run := register(shardNames[0], "running")
+	// First and secondary shards of the running quantization are protected.
+	for _, protected := range shardNames[:2] {
+		if rec := request(t, a, "DELETE", "/api/models?path="+protected, ""); rec.Code != 400 {
+			t.Fatalf("deleted active shard %s: %d %s", protected, rec.Code, rec.Body.String())
+		}
+		if _, err := os.Stat(filepath.Join(a.models, protected)); err != nil {
+			t.Fatalf("protected shard vanished: %v", err)
+		}
+	}
+	// Unrelated models stay deletable.
+	for _, open := range shardNames[2:] {
+		if rec := request(t, a, "DELETE", "/api/models?path="+open, ""); rec.Code != 200 {
+			t.Fatalf("refused unrelated %s: %d %s", open, rec.Code, rec.Body.String())
+		}
+	}
+	// Stopped runs no longer hold their shards.
+	run.Status = "stopped"
+	if rec := request(t, a, "DELETE", "/api/models?path="+shardNames[1], ""); rec.Code != 200 {
+		t.Fatalf("shard protected after stop: %d %s", rec.Code, rec.Body.String())
+	}
+	// A different total for the same base name is a different set.
+	otherTotal := "Mixtral-Instruct-Q4_K_M-00001-of-00003.gguf"
+	if sameShardSet("Mixtral-Instruct-Q4_K_M-00001-of-00002.gguf", otherTotal) {
+		t.Fatal("different shard totals treated as one set")
+	}
+}
