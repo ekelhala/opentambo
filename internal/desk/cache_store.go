@@ -78,9 +78,9 @@ type cacheStore struct {
 
 // tempReservation books budget for a temporary snapshot the caller is about
 // to ask llama-server to write. The exact size is unknown beforehand, so the
-// reservation uses a conservative estimate and is either absorbed by Publish
-// (success), released by DiscardTempWrite (failure), or dropped once older
-// than the save deadline it guards (an abandoned write).
+// reservation uses the store's worst-case bound (TempEstimate) and is either
+// absorbed by Publish (success), released by EndTempWrite (failure), or
+// dropped once older than the save deadline it guards (an abandoned write).
 type tempReservation struct {
 	bytes int64
 	at    time.Time
@@ -429,13 +429,14 @@ func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 			}
 			return nil, errors.New("snapshot checksum mismatch; entry invalidated")
 		}
-		if invalidateErr := s.mutate(func() error {
+		// Committed bytes leave the used total with the entry itself; the
+		// reservation pool tracks only in-flight temp writes and must not
+		// be credited here (issue #23).
+		_ = s.mutate(func() error {
 			_ = os.Remove(filepath.Join(s.dir, e.Filename))
 			delete(s.entries, entryID)
 			return nil
-		}); invalidateErr == nil {
-			s.releaseLocked(e.Bytes)
-		}
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -516,7 +517,6 @@ func (s *cacheStore) Delete(entryID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	s.releaseLocked(e.Bytes)
 	return true, nil
 }
 
@@ -534,39 +534,41 @@ func (s *cacheStore) Prune() int {
 	return removed
 }
 
-// TempEstimate reports the conservative upper bound reserved for a snapshot
-// write whose exact size is unknown before llama-server produces it: the
-// average committed snapshot in this namespace, or the per-entry limit when
-// the namespace has no history yet.
+// TempEstimate reports the bytes reserved for a snapshot write whose exact
+// size is unknown before llama-server produces it: the per-entry limit
+// itself. Publish rejects any snapshot larger than maxEntryBytes, so this is
+// the largest write the store can ever accept — a true upper bound, not a
+// historical average (an average under-reserves as snapshots grow, which let
+// a child write past the budget, issue #23). Reserving it means a booked
+// write cannot authorize bytes beyond the configured budget, at the cost of
+// refusing saves earlier when the namespace is tight.
 func (s *cacheStore) TempEstimate() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.tempEstimateLocked()
-}
-
-func (s *cacheStore) tempEstimateLocked() int64 {
-	var used int64
-	for _, e := range s.entries {
-		used += e.Bytes
-	}
-	if len(s.entries) == 0 {
-		return s.maxEntryBytes
-	}
-	if avg := used / int64(len(s.entries)); avg > 0 && avg < s.maxEntryBytes {
-		return avg
-	}
 	return s.maxEntryBytes
 }
 
 // BeginTempWrite books budget against the store limits for a snapshot write
 // the caller is about to request from llama-server. The exact size is not
-// known beforehand, so the caller passes a conservative estimate (see
-// TempEstimate); a write that cannot fit without evicting committed entries
-// is refused up front instead of letting the child fill the volume outside
-// the configured budget. The reservation must end with EndTempWrite once the
-// snapshot is published or the write is abandoned; reservations whose save
-// deadline has passed are dropped by maintenance so a crashed writer cannot
-// hold budget forever.
+// known beforehand, so the caller passes the store's worst-case estimate
+// (see TempEstimate); a write that cannot fit without evicting committed
+// entries is refused up front instead of letting the child fill the volume
+// outside the configured budget. Refusing never evicts: committed snapshots
+// stay safe against a write that may fail or be abandoned, so a full cache
+// rejects new saves until TTL/LRU maintenance frees room or a reservation
+// lapses. Simultaneous writes in a shared namespace each book the full
+// worst-case estimate, so committed plus reserved bytes always bound every
+// write the store would publish.
+//
+// Limitation, stated honestly: the manager cannot hard-limit the bytes the
+// child writes to <id>.tmp (that would need filesystem quotas; see issue
+// #15 for durable accounting). The reservation covers every size Publish
+// would accept; a child misbehaving beyond that produces an oversized file
+// that Publish rejects and unlinks, but the transient write itself is only
+// bounded by the child, not enforced here. The reservation must end with
+// EndTempWrite once the snapshot is published or the write is abandoned;
+// reservations whose save deadline has passed are dropped by maintenance so
+// a crashed writer cannot hold budget forever.
 func (s *cacheStore) BeginTempWrite(entryID string, estimate int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -367,9 +367,11 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 
 	entryID := id()
 	tmpName := entryID + ".tmp"
-	// Reserve the write budget before llama-server produces the snapshot:
-	// traffic that cannot fit inside the configured limits must never reach
-	// the volume as an unaccounted temp file.
+	// Reserve the write budget before llama-server produces the snapshot,
+	// booked at the per-entry limit: the largest snapshot the store could
+	// ever publish. Traffic that cannot fit inside the configured limits
+	// with its worst-case write must never reach the volume as an
+	// unaccounted temp file (issue #23).
 	if !rc.store.BeginTempWrite(entryID, rc.store.TempEstimate()) {
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		return

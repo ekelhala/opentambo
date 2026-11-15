@@ -135,6 +135,87 @@ func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
 	}
 }
 
+func TestCacheStoreTempEstimateIsWorstCase(t *testing.T) {
+	dir := t.TempDir()
+	// Issue #23 reproduction: a 130-byte budget with a 100-byte per-entry
+	// limit and one 60-byte committed snapshot. The average-based estimate
+	// reserved only 60 bytes and authorized a potential 100-byte write
+	// (160 total) past the 130-byte budget.
+	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 130, 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.TempEstimate(); got != 100 {
+		t.Fatalf("an empty namespace must reserve the per-entry limit, got %d", got)
+	}
+	writeSnapshot(t, store.dir, "seed", make([]byte, 60))
+	if _, err = store.Publish("seed", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.TempEstimate(); got != 100 {
+		t.Fatalf("history must not lower the estimate below the per-entry limit, got %d", got)
+	}
+	if store.BeginTempWrite("next", store.TempEstimate()) {
+		t.Fatal("authorized a potential 100-byte write with only 70 bytes available")
+	}
+	// A refused save must leave older committed snapshots intact.
+	if !store.HasEntry("seed") {
+		t.Fatal("refused reservation dropped a committed snapshot")
+	}
+	if info, err := os.Stat(filepath.Join(store.dir, "seed.bin")); err != nil || info.Size() != 60 {
+		t.Fatalf("refused reservation damaged the committed snapshot: %v", err)
+	}
+}
+
+func TestCacheStoreGrowingSnapshotsStayWithinBudget(t *testing.T) {
+	dir := t.TempDir()
+	// Growing-snapshot regression: a small committed snapshot must not
+	// under-reserve the store for a much larger snapshot written later.
+	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 1000, 1000, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSnapshot(t, store.dir, "small", make([]byte, 50))
+	if _, err = store.Publish("small", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	// 950 bytes free: the worst-case reservation (1000) exceeds the free
+	// space, so the large write is refused until more room exists.
+	if store.BeginTempWrite("big", store.TempEstimate()) {
+		t.Fatal("worst-case reservation must be refused while it cannot fit")
+	}
+	// Widen the budget and the same write books fully.
+	if err := store.applyPolicy(2100, 1000, 0); err != nil {
+		t.Fatal(err)
+	}
+	if !store.BeginTempWrite("big", store.TempEstimate()) {
+		t.Fatal("the large write must fit once the budget allows it")
+	}
+	// Simultaneous writes share the namespace: committed plus reserved
+	// bytes are bounded, so a third worst-case write is refused.
+	if !store.BeginTempWrite("concurrent", 1000) {
+		t.Fatal("50 + 1000 + 1000 must fit in 2100")
+	}
+	if store.BeginTempWrite("fourth", 1000) {
+		t.Fatal("50 + 3*1000 exceeds the 2100 budget and must be refused")
+	}
+	store.EndTempWrite("concurrent")
+	store.EndTempWrite("big")
+	// Partial failure releases: after abandoning the write the budget is
+	// available again (covered at the pool level in the accounting test).
+	writeSnapshot(t, store.dir, "big", make([]byte, 900))
+	if _, err = store.Publish("big", []int32{2}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if !store.HasEntry("small") || !store.HasEntry("big") {
+		t.Fatal("growing snapshot publication lost history")
+	}
+	entries, used, budget := store.Summary()
+	if len(entries) != 2 || used != 950 || budget != 2100 {
+		t.Fatalf("accounting drift: %d entries, used %d, budget %d", len(entries), used, budget)
+	}
+}
+
 func TestCacheStoreTempWriteReservationAccounting(t *testing.T) {
 	dir := t.TempDir()
 	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 1<<20, 1<<18, 0)
