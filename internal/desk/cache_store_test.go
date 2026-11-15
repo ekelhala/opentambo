@@ -267,6 +267,9 @@ func TestStoreSummaryIsSanitized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A deterministic clock keeps the timestamp digits stable so the leak
+	// check below cannot trip over a coincidental substring.
+	store.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
 	writeSnapshot(t, store.dir, "secret", []byte("snapshot"))
 	if _, err = store.Publish("secret", []int32{91, 92, 93, 94}, 4); err != nil {
 		t.Fatal(err)
