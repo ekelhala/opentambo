@@ -22,7 +22,7 @@ import (
 	"sync"
 )
 
-const identityHashTag = "opentambo-prompt-cache-identity-v1\n"
+const identityHashTag = "opentambo-prompt-cache-identity-v2\n"
 
 // verifiedCacheArchitectures lists GGUF architectures that passed a real
 // save/restart/restore/reuse test against a supported llama-server build.
@@ -138,27 +138,71 @@ func (a *App) promptCacheIdentity(model, architecture string, spec Launch) (stri
 		return "", err
 	}
 	fmt.Fprintf(hash, "binary=%s\n", digest)
-	for _, arg := range stateAffectingArgs(spec) {
-		fmt.Fprintf(hash, "arg=%s\n", arg)
+	effective, err := a.stateAffectingArgs(spec)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range effective {
+		fmt.Fprintf(hash, "arg=%s\n", entry)
+	}
+	// Environment overrides can change engine state in ways the manager
+	// cannot audit; any difference invalidates the namespace conservatively.
+	envKeys := make([]string, 0, len(spec.Env))
+	for key := range spec.Env {
+		envKeys = append(envKeys, key)
+	}
+	sort.Strings(envKeys)
+	for _, key := range envKeys {
+		fmt.Fprintf(hash, "env=%s=%s\n", key, spec.Env[key])
 	}
 	return hex.EncodeToString(hash.Sum(nil))[:16], nil
 }
 
 // stateAffectingArgs keeps configuration that can change KV state or prompt
-// rendering out of alias/port churn. Unknown extra arguments are included
-// conservatively; anything ambiguous invalidates snapshots.
-func stateAffectingArgs(spec Launch) []string {
+// rendering out of alias/port churn. The effective argv keeps its original
+// order and flag/value adjacency (sorting individual tokens lets two
+// different settings swap into the same identity), and any argument value
+// that names an existing regular file — adapters, draft models, projections,
+// control vectors, grammar or template files — is bound by content digest so
+// replacing the file under the same path invalidates the namespace. Unknown
+// arguments are included as-is; anything ambiguous invalidates snapshots.
+func (a *App) stateAffectingArgs(spec Launch) ([]string, error) {
 	volatile := map[string]bool{"--port": true, "--host": true, "--alias": true, "--model": true, "-m": true, "-p": true}
-	args := []string{fmt.Sprintf("ctx=%d", spec.Context), fmt.Sprintf("gpu=%d", spec.GPULayers)}
+	out := []string{fmt.Sprintf("ctx=%d", spec.Context), fmt.Sprintf("gpu=%d", spec.GPULayers)}
+	skipValue := false
 	for _, arg := range spec.Args {
-		name := strings.SplitN(arg, "=", 2)[0]
-		if volatile[name] {
+		if skipValue {
+			// The value of a volatile flag in separate-token form churns
+			// without touching model state.
+			skipValue = false
 			continue
 		}
-		args = append(args, arg)
+		name := strings.SplitN(arg, "=", 2)[0]
+		if volatile[name] {
+			skipValue = !strings.Contains(arg, "=")
+			continue
+		}
+		out = append(out, arg)
+		value := arg
+		if strings.Contains(arg, "=") {
+			value = arg[strings.IndexByte(arg, '=')+1:]
+		} else if strings.HasPrefix(arg, "-") {
+			continue // bare flag; a following value token is bound on its own turn
+		}
+		if strings.HasPrefix(value, "-") || len(value) > 4096 {
+			continue
+		}
+		info, err := os.Stat(value)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		digest, err := a.fileDigest(value)
+		if err != nil {
+			return nil, fmt.Errorf("prompt cache cannot hash referenced asset %s: %w", value, err)
+		}
+		out = append(out, "asset="+filepath.Base(value)+":"+digest)
 	}
-	sort.Strings(args)
-	return args
+	return out, nil
 }
 
 // fileDigest content-addresses files with an on-disk cache keyed by path,

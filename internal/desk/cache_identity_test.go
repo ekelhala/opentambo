@@ -59,3 +59,122 @@ func TestPromptCacheIdentityResolvesPathExecutable(t *testing.T) {
 		t.Fatal("accepted an unresolvable executable")
 	}
 }
+
+func TestPromptCacheIdentityDistinguishesFlagValueAssociations(t *testing.T) {
+	a := testApp(t, t.TempDir()+"/llama-server")
+	if err := os.WriteFile(a.binary, []byte("binary-v1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	model := filepath.Join(a.models, "model.gguf")
+	writeMinimalGGUF(t, model)
+	base := Launch{Context: 8192, GPULayers: 99}
+
+	// Distinct RoPE settings must not collide regardless of value order.
+	one := base
+	one.Args = []string{"--rope-freq-base", "10000", "--rope-freq-scale", "2"}
+	two := base
+	two.Args = []string{"--rope-freq-base", "2", "--rope-freq-scale", "10000"}
+	first, err := a.promptCacheIdentity(model, "llama", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.promptCacheIdentity(model, "llama", two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("swapped flag/value pairs produced an identical namespace")
+	}
+	// Repeating the identical configuration must stay stable (control).
+	repeat, err := a.promptCacheIdentity(model, "llama", one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repeat != first {
+		t.Fatal("identical configuration changed the namespace")
+	}
+	// Repeated flags stay distinct from a single occurrence and stay stable.
+	dup := one
+	dup.Args = []string{"--rope-freq-base", "10000", "--rope-freq-base", "10000", "--rope-freq-scale", "2"}
+	dupID, err := a.promptCacheIdentity(model, "llama", dup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dupAgain, err := a.promptCacheIdentity(model, "llama", dup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dupID != dupAgain {
+		t.Fatal("repeated-flag configuration is not stable")
+	}
+	// Alias/port churn stays reusable.
+	volatileA := base
+	volatileA.Args = []string{"--port", "8081", "--alias", "one", "--jinja"}
+	volatileB := base
+	volatileB.Args = []string{"--port", "8099", "--alias", "two", "--jinja"}
+	idA, err := a.promptCacheIdentity(model, "llama", volatileA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := a.promptCacheIdentity(model, "llama", volatileB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idA != idB {
+		t.Fatal("alias/port churn invalidated a reusable namespace")
+	}
+	// Environment overrides invalidate conservatively.
+	withEnv := base
+	withEnv.Env = map[string]string{"GGML_CUDA_FORCE_MMQ": "1"}
+	envID, err := a.promptCacheIdentity(model, "llama", withEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if envID == first || envID == second {
+		t.Fatal("environment override did not invalidate the namespace")
+	}
+}
+
+func TestPromptCacheIdentityBindsAdapterContents(t *testing.T) {
+	a := testApp(t, t.TempDir()+"/llama-server")
+	if err := os.WriteFile(a.binary, []byte("binary-v1"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	model := filepath.Join(a.models, "model.gguf")
+	writeMinimalGGUF(t, model)
+	adapter := filepath.Join(t.TempDir(), "adapter.gguf")
+	if err := os.WriteFile(adapter, []byte("adapter-content-v1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec := Launch{Context: 8192, GPULayers: 99, Args: []string{"--lora", adapter}}
+	before, err := a.promptCacheIdentity(model, "llama", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(adapter, []byte("adapter-content-v2!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := a.promptCacheIdentity(model, "llama", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before == after {
+		t.Fatal("replacing adapter contents kept the same namespace")
+	}
+	// Inline --lora=path form is bound the same way.
+	inline := Launch{Context: 8192, GPULayers: 99, Args: []string{"--lora=" + adapter}}
+	inlineID, err := a.promptCacheIdentity(model, "llama", inline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(adapter, []byte("adapter-content-v3!!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inlineAfter, err := a.promptCacheIdentity(model, "llama", inline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inlineID == inlineAfter {
+		t.Fatal("inline --flag=value form missed the asset digest")
+	}
+}
