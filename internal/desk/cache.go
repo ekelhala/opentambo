@@ -35,14 +35,16 @@ const (
 	defaultCacheMinReuseTokens = 256
 	// cacheLeaseWait bounds how long a request queues behind the slot owner.
 	cacheLeaseWait = 10 * time.Minute
+)
+
+var (
+	// cacheSaveWait bounds post-response snapshot work before it is abandoned.
+	// Tests shorten it to exercise the abandoned-write path.
+	cacheSaveWait = 60 * time.Second
 	// cacheSettleWait bounds waiting for the slot to go idle after a
 	// disconnect or cancellation before releasing the lease.
 	cacheSettleWait = 5 * time.Second
 )
-
-// cacheSaveWait bounds post-response snapshot work before it is abandoned.
-// Tests shorten it to exercise the abandoned-write path.
-var cacheSaveWait = 60 * time.Second
 
 func (c *PromptCache) normalized() PromptCache {
 	spec := PromptCache{Enabled: c.Enabled}
@@ -102,6 +104,12 @@ type RunCache struct {
 	nctx int // slot 0 context size confirmed by the capability probe
 
 	liveTokens []int32 // verified prompt prefix live in slot 0; nil = unknown
+
+	// slotUnsettled records that a generation was abandoned without the
+	// control API confirming the slot went idle. Until idleness is re-
+	// confirmed (or the child restarts), no further forwarding or restore
+	// may touch the slot; a lost ownership barrier is unsafe traffic.
+	slotUnsettled bool
 
 	stats CacheStats
 }
@@ -185,7 +193,18 @@ func (rc *RunCache) Prepare(ctx context.Context, endpoint string, body map[strin
 	rc.mu.Lock()
 	rc.stats.Requests++
 	status := rc.status
+	unsettled := rc.slotUnsettled
 	rc.mu.Unlock()
+
+	if unsettled {
+		// A previous generation was abandoned without the control API
+		// confirming the slot went idle. Attempt one re-confirmation inside
+		// the request window; until the slot is proven idle again (or the
+		// child restarts), no forwarding or restore may touch the slot.
+		if rc.reconfirmSlotIdle(ctx) {
+			return nil, nil, fmt.Errorf("prompt cache: slot %d may still be processing an abandoned generation", chatSlot)
+		}
+	}
 
 	clientBypass := false
 	if value, present := body["cache_prompt"]; present && value == false {
@@ -328,9 +347,17 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 		// Failed, aborted, or bypassed traffic leaves unknown slot state.
 		rc.invalidateLive()
 		if plan.bypass || !clientComplete {
-			// Give the engine a moment to stop working on the slot.
+			// Give the engine a moment to stop working on the slot. An
+			// unconfirmed idle slot is an ownership barrier: handing the
+			// lease on while the child may still be generating (or while
+			// the control API cannot answer) must block all further slot
+			// traffic until idle is re-confirmed or the child restarts.
 			settleCtx, cancel := context.WithTimeout(context.Background(), cacheSettleWait)
-			rc.client.waitSlotIdle(settleCtx, chatSlot)
+			if !rc.client.waitSlotIdle(settleCtx, chatSlot) {
+				rc.mu.Lock()
+				rc.slotUnsettled = true
+				rc.mu.Unlock()
+			}
 			cancel()
 		}
 		return
@@ -376,6 +403,22 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	rc.stats.SaveMsTotal += int64(saved.TimingsMs.SaveMs)
 	rc.stats.BytesSaved += int64(saved.NWritten)
 	rc.mu.Unlock()
+}
+
+// reconfirmSlotIdle re-checks whether the owned slot went idle after an
+// unconfirmed settle. It returns false once idleness is confirmed (clearing
+// the barrier) and true while the slot is still busy or unobservable.
+func (rc *RunCache) reconfirmSlotIdle(ctx context.Context) bool {
+	waitCtx, cancel := context.WithTimeout(ctx, cacheSettleWait)
+	defer cancel()
+	if rc.client.waitSlotIdle(waitCtx, chatSlot) {
+		rc.mu.Lock()
+		rc.slotUnsettled = false
+		rc.liveTokens = nil
+		rc.mu.Unlock()
+		return false
+	}
+	return true
 }
 
 func (rc *RunCache) invalidateLive() {

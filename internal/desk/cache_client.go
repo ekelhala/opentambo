@@ -179,18 +179,17 @@ func (c *llamaClient) eraseSlot(ctx context.Context, slot int) error {
 
 // waitSlotIdle polls until the owned slot stops processing. Used after client
 // disconnects and cancellations so the next owner sees a settled slot.
+// Confirmation requires the slot to appear in the listing as idle: a slot
+// that is absent (or a control API that cannot be reached) is never treated
+// as settled, because "unknown" must not grant the next owner access.
 func (c *llamaClient) waitSlotIdle(ctx context.Context, slot int) bool {
 	for {
 		list, err := c.slots(ctx)
 		if err == nil {
-			busy := false
 			for _, s := range list {
-				if s.ID == slot && s.IsProcessing {
-					busy = true
+				if s.ID == slot && !s.IsProcessing {
+					return true
 				}
-			}
-			if !busy {
-				return true
 			}
 		}
 		select {

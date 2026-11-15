@@ -42,6 +42,8 @@ type fakeLlama struct {
 	savePartial   bool          // write partial bytes to the temp file before failing
 	saveSlow      time.Duration // stall the save request (simulates an abandoned write)
 	saveNOverride int           // when set, report this n_saved instead of the token count
+	slotsFail     bool          // /slots returns an error (control API unreachable-ish)
+	slotsEmpty    bool          // /slots lists no slots at all (owned slot absent)
 }
 
 func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +66,18 @@ func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/slots":
 		f.mu.Lock()
 		processing := f.inflight > 0
+		fail := f.slotsFail
+		empty := f.slotsEmpty
 		f.mu.Unlock()
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"error":true,"message":"slots unavailable"}`)
+			return
+		}
+		if empty {
+			writeJSON(w, []map[string]any{})
+			return
+		}
 		writeJSON(w, []map[string]any{{"id": 0, "n_ctx": 4096, "is_processing": processing}})
 	case "/apply-template":
 		writeJSON(w, map[string]string{"prompt": fakeRender(fields)})
