@@ -29,6 +29,17 @@ import (
 
 const cacheIndexVersion = 1
 
+// cachePolicyFile persists a namespace's maintenance policy next to its
+// snapshots so relaunches and cache listings restore the real limits before
+// any destructive maintenance instead of guessing defaults.
+const cachePolicyFile = "policy.json"
+
+type cachePolicy struct {
+	MaxBytes      int64 `json:"max_bytes"`
+	MaxEntryBytes int64 `json:"max_entry_bytes"`
+	TTLSeconds    int64 `json:"ttl_seconds"`
+}
+
 type CacheEntry struct {
 	ID           string    `json:"id"`
 	Namespace    string    `json:"namespace"`
@@ -60,6 +71,26 @@ type cacheStore struct {
 }
 
 func newCacheStore(dir, namespace string, maxBytes, maxEntryBytes int64, ttl time.Duration) (*cacheStore, error) {
+	return openCacheStore(dir, namespace, &cachePolicy{MaxBytes: maxBytes, MaxEntryBytes: maxEntryBytes, TTLSeconds: int64(ttl / time.Second)})
+}
+
+// observeCacheStore opens a discovered namespace directory for reporting.
+// The persisted policy is restored when present; opening never runs
+// destructive maintenance, so a listing cannot prune snapshots under guessed
+// default limits.
+func observeCacheStore(dir, namespace string) (*cacheStore, error) {
+	s, err := openCacheStore(dir, namespace, nil)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// openCacheStore loads a namespace directory. When policy is non-nil it is
+// the authoritative policy (a launch): it is persisted and maintenance runs
+// under it immediately. When policy is nil the persisted policy is restored
+// if present, and no destructive maintenance runs at open.
+func openCacheStore(dir, namespace string, policy *cachePolicy) (*cacheStore, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
@@ -70,7 +101,13 @@ func newCacheStore(dir, namespace string, maxBytes, maxEntryBytes int64, ttl tim
 	if err = os.Chmod(resolved, 0700); err != nil {
 		return nil, err
 	}
-	s := &cacheStore{dir: resolved, namespace: namespace, maxBytes: maxBytes, maxEntryBytes: maxEntryBytes, ttl: ttl, entries: map[string]*CacheEntry{}, pins: map[string]int{}, now: time.Now}
+	s := &cacheStore{dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, pins: map[string]int{}, now: time.Now}
+	if persisted, ok := readCachePolicy(resolved); ok {
+		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
+	}
+	if policy != nil {
+		s.maxBytes, s.maxEntryBytes, s.ttl = policy.MaxBytes, policy.MaxEntryBytes, secondsDuration(policy.TTLSeconds)
+	}
 	if err = s.recoverFiles(); err != nil {
 		return nil, err
 	}
@@ -79,11 +116,58 @@ func newCacheStore(dir, namespace string, maxBytes, maxEntryBytes int64, ttl tim
 	if err = s.loadLocked(); err != nil {
 		return nil, err
 	}
-	s.enforceLocked(s.now())
-	if err = s.commitLocked(); err != nil {
-		return nil, err
+	if policy != nil {
+		if err = s.writePolicyLocked(); err != nil {
+			return nil, err
+		}
+		s.enforceLocked(s.now())
+		if err = s.commitLocked(); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
+}
+
+func readCachePolicy(dir string) (cachePolicy, bool) {
+	contents, err := os.ReadFile(filepath.Join(dir, cachePolicyFile))
+	if err != nil {
+		return cachePolicy{}, false
+	}
+	var p cachePolicy
+	if err = json.Unmarshal(contents, &p); err != nil {
+		return cachePolicy{}, false
+	}
+	if p.MaxBytes <= 0 || p.MaxEntryBytes <= 0 || p.TTLSeconds < 0 {
+		return cachePolicy{}, false
+	}
+	return p, true
+}
+
+// writePolicyLocked persists the maintenance policy atomically.
+func (s *cacheStore) writePolicyLocked() error {
+	contents, err := json.Marshal(cachePolicy{MaxBytes: s.maxBytes, MaxEntryBytes: s.maxEntryBytes, TTLSeconds: int64(s.ttl / time.Second)})
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.dir, cachePolicyFile)
+	if err = os.WriteFile(path+".tmp", contents, 0600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
+}
+
+// applyPolicy updates maintenance limits on an open store and persists them.
+// Reopening a namespace with new settings adopts them; when runs share a
+// namespace the most recent launch wins deterministically.
+func (s *cacheStore) applyPolicy(maxBytes, maxEntryBytes int64, ttl time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.maxBytes, s.maxEntryBytes, s.ttl = maxBytes, maxEntryBytes, ttl
+	if err := s.writePolicyLocked(); err != nil {
+		return err
+	}
+	s.enforceLocked(s.now())
+	return s.commitLocked()
 }
 
 // recoverFiles removes interrupted publications (temp files) and binary files

@@ -75,6 +75,9 @@ export function LaunchDialog({
   )
   const [promptCache, setPromptCache] = useState(Boolean(profile?.prompt_cache?.enabled))
   const [busy, setBusy] = useState(false)
+  // Advanced cache settings have no editing controls here; carrying the saved
+  // profile's values through keeps "Run again" from silently resetting them.
+  const savedCache = profile?.prompt_cache
 
   const specArgs = args.split('\n').map((s) => s.trim()).filter(Boolean)
   const specName = name.trim() || (model ? modelStem(model) : 'model')
@@ -119,7 +122,7 @@ export function LaunchDialog({
         port: Number(port),
         args: specArgs,
         env: envMap,
-        prompt_cache: { enabled: promptCache },
+        prompt_cache: { ...savedCache, enabled: promptCache },
       } satisfies Launch)
       toast.success(`${specName} launched`)
       onLaunched()

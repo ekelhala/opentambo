@@ -25,6 +25,11 @@ func (a *App) cacheStoreFor(dir, namespace string, spec PromptCache) (*cacheStor
 	store := a.cacheStores[resolved]
 	a.mu.Unlock()
 	if store != nil {
+		// Reopening a namespace adopts the supplied policy deterministically
+		// (the most recent launch wins when runs share the namespace).
+		if err = store.applyPolicy(spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds)); err != nil {
+			return nil, err
+		}
 		return store, nil
 	}
 	opened, err := newCacheStore(resolved, namespace, spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds))
@@ -40,7 +45,9 @@ func (a *App) cacheStoreFor(dir, namespace string, spec PromptCache) (*cacheStor
 	}
 	a.mu.Unlock()
 	if store != opened {
-		return store, nil
+		if err = store.applyPolicy(spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds)); err != nil {
+			return nil, err
+		}
 	}
 	return store, nil
 }
@@ -65,7 +72,7 @@ func (a *App) registryCacheStores() []*cacheStore {
 			if _, seen := known[dir]; seen {
 				continue
 			}
-			store, err := newCacheStore(dir, item.Name(), defaultCacheMaxBytes, defaultCacheMaxEntryBytes, secondsDuration(defaultCacheTTLSeconds))
+			store, err := observeCacheStore(dir, item.Name())
 			if err != nil {
 				continue
 			}
