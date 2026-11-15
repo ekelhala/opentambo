@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { BackIcon, CopyIcon, PlayIcon, PulseIcon, StopIcon, WarnIcon } from '@/components/icons'
+import { CachePanel } from '@/components/cache-status'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/status-pill'
-import { CacheBadge } from '@/views/servers'
 import { api, type Run } from '@/lib/api'
-import { bytes, date, uptime } from '@/lib/format'
+import { date, uptime } from '@/lib/format'
 import { navigate } from '@/lib/router'
 import { toast } from 'sonner'
 
@@ -227,89 +227,6 @@ function ArgBlock({ label, value, wrap }: { label: string; value: string; wrap?:
     <div className="grid gap-1">
       <span className="text-[var(--t-text-3)]">{label}</span>
       <pre className={wrap ? 'well wrap' : 'well nowrap'}>{value}</pre>
-    </div>
-  )
-}
-
-function CachePanel({ run }: { run: Run }) {
-  const cache = run.cache
-  if (!cache) return null
-  const stats = cache.stats
-  return (
-    <div className="panel">
-      <div className="panel-head">
-        <span className="panel-title">Prompt cache</span>
-        <CacheBadge cache={cache} />
-        <span className="panel-meta">
-          {cache.build ? `llama.cpp ${cache.build}` : ''}
-          {cache.namespace ? ` · ns ${cache.namespace}` : ''}
-        </span>
-      </div>
-      {cache.status === 'unsupported' && (
-        <div className="callout callout-bad m-3 mb-0">
-          <WarnIcon />
-          <p className="break-all">
-            <strong>Persistent cache unavailable for this build.</strong> {cache.reason || 'The capability probe failed.'} Requests still run normally.
-          </p>
-        </div>
-      )}
-      {cache.status === 'error' && (
-        <div className="callout callout-bad m-3 mb-0">
-          <WarnIcon />
-          <p className="break-all">
-            <strong>Prompt cache hit an error.</strong> {cache.reason || 'The cache could not keep the slot in a known state.'} Requests still run normally.
-          </p>
-        </div>
-      )}
-      {cache.status === 'checking' && (
-        <p className="panel-body text-xs text-[var(--t-text-2)]">
-          Verifying save/restore capability with the child server…
-        </p>
-      )}
-      {cache.status === 'ready' && stats && (
-        <div className="panel-body">
-          <div className="stat-grid">
-            <div className="stat">
-              <span className="k">Disk hits</span>
-              <span className="v">
-                {stats.hits}
-                <span className="u">restored</span>
-              </span>
-              <span className="f">
-                {stats.restores} restores · {bytes(stats.bytes_restored)}
-              </span>
-            </div>
-            <div className="stat">
-              <span className="k">Snapshots saved</span>
-              <span className="v">
-                {stats.saves}
-                <span className="u">published</span>
-              </span>
-              <span className="f">
-                {bytes(stats.bytes_saved)} written{stats.save_failures ? ` · ${stats.save_failures} failed` : ''}
-              </span>
-            </div>
-            <div className="stat">
-              <span className="k">Live reuse</span>
-              <span className="v">
-                {stats.live_kept}
-                <span className="u">kept</span>
-              </span>
-              <span className="f">{stats.requests} coordinated requests</span>
-            </div>
-            <div className="stat">
-              <span className="k">Cold / bypassed</span>
-              <span className="v">
-                {stats.misses + stats.bypassed}
-                <span className="u">plain</span>
-              </span>
-              <span className="f">
-                {cache.min_reuse_tokens?.toLocaleString()} token min reuse · {stats.restore_failures} bad restores
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

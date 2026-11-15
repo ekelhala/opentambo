@@ -1,21 +1,9 @@
 import { ChevronRightIcon } from '@/components/icons'
+import { CacheBadge } from '@/components/cache-status'
 import { StatusPill } from '@/components/status-pill'
-import { type CacheView, type Run } from '@/lib/api'
+import { type Run } from '@/lib/api'
 import { uptime } from '@/lib/format'
 import { navigate } from '@/lib/router'
-
-export function CacheBadge({ cache }: { cache?: CacheView }) {
-  if (!cache?.requested) return null
-  if (cache.status === 'ready')
-    return <span className="badge shrink-0">cache</span>
-  if (cache.status === 'checking')
-    return <span className="badge badge-info shrink-0">cache…</span>
-  return (
-    <span className="badge badge-warn shrink-0" title={cache.reason}>
-      {cache.status === 'error' ? 'cache error' : 'no cache'}
-    </span>
-  )
-}
 
 function runRank(run: Run): number {
   return run.status === 'running' ? 0 : run.status === 'stopping' ? 1 : 2

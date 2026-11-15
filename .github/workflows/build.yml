@@ -19,6 +19,15 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: test -z "$(gofmt -l cmd internal)"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Web UI tests
+        working-directory: ui
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+          bun run lint
   build:
     needs: test
     runs-on: ubuntu-latest
