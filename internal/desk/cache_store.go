@@ -65,10 +65,15 @@ type cacheStore struct {
 	maxEntryBytes int64
 	ttl           time.Duration
 	entries       map[string]*CacheEntry
-	reserved      int64 // bytes from in-flight publishes, counted against the budget
-	temps         map[string]*tempReservation
-	pins          map[string]int
-	now           func() time.Time
+	// invalid tracks entries whose backing file vanished or no longer
+	// matches the index while a pin held the file in place. They stay out
+	// of restore circulation but keep their slot in the index until the
+	// final Done runs cleanup (issue #22).
+	invalid  map[string]bool
+	reserved int64 // bytes from in-flight publishes, counted against the budget
+	temps    map[string]*tempReservation
+	pins     map[string]int
+	now      func() time.Time
 }
 
 // tempReservation books budget for a temporary snapshot the caller is about
@@ -112,7 +117,7 @@ func openCacheStore(dir, namespace string, policy *cachePolicy) (*cacheStore, er
 	if err = os.Chmod(resolved, 0700); err != nil {
 		return nil, err
 	}
-	s := &cacheStore{dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, temps: map[string]*tempReservation{}, pins: map[string]int{}, now: time.Now}
+	s := &cacheStore{dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, invalid: map[string]bool{}, temps: map[string]*tempReservation{}, pins: map[string]int{}, now: time.Now}
 	if persisted, ok := readCachePolicy(resolved); ok {
 		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
 	}
@@ -213,13 +218,18 @@ func (s *cacheStore) recoverFiles() error {
 
 // loadLocked replaces the in-memory index from disk, dropping entries whose
 // files are missing or have the wrong size (an interrupted commit or an
-// externally modified snapshot).
+// externally modified snapshot). A pinned entry is never dropped here: a
+// live restore owns its file, so the file stays on disk and the entry stays
+// tracked but is marked invalid until cleanup runs when the final pin is
+// released (issue #22).
 func (s *cacheStore) loadLocked() error {
 	entries := map[string]*CacheEntry{}
+	invalid := map[string]bool{}
 	contents, err := os.ReadFile(filepath.Join(s.dir, "index.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			s.entries = entries
+			s.invalid = invalid
 			return nil
 		}
 		return err
@@ -236,13 +246,23 @@ func (s *cacheStore) loadLocked() error {
 			continue
 		}
 		info, err := os.Stat(filepath.Join(s.dir, e.Filename))
-		if err != nil || !info.Mode().IsRegular() || info.Size() != e.Bytes {
+		broken := err != nil || !info.Mode().IsRegular() || info.Size() != e.Bytes
+		if broken || s.invalid[id] {
+			if s.pins[id] > 0 {
+				// A live restore owns this file. Keep the entry tracked and
+				// carry the invalid mark across reloads: the size check here
+				// cannot see a same-size checksum tamper found earlier.
+				entries[id] = e
+				invalid[id] = true
+				continue
+			}
 			_ = os.Remove(filepath.Join(s.dir, e.Filename))
 			continue
 		}
 		entries[id] = e
 	}
 	s.entries = entries
+	s.invalid = invalid
 	return nil
 }
 
@@ -360,7 +380,7 @@ func (s *cacheStore) Candidates() []*CacheEntry {
 	now := s.now()
 	out := make([]*CacheEntry, 0, len(s.entries))
 	for _, e := range s.entries {
-		if s.expiredLocked(e, now) {
+		if s.invalid[e.ID] || s.expiredLocked(e, now) {
 			continue
 		}
 		out = append(out, e)
@@ -382,6 +402,8 @@ func (s *cacheStore) expiredLocked(e *CacheEntry, now time.Time) bool {
 
 // RestoreReady verifies file presence, expiry, and checksum, then pins the
 // entry so eviction cannot remove it mid-restore. The caller must call Done.
+// An entry whose file was found invalid while another restore holds it is
+// rejected but keeps its file until that owner releases the pin (issue #22).
 func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -389,11 +411,24 @@ func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 	if e == nil {
 		return nil, errors.New("entry no longer present")
 	}
+	if s.invalid[entryID] {
+		return nil, errors.New("snapshot file no longer matches the index")
+	}
 	if s.expiredLocked(e, s.now()) {
 		return nil, errors.New("entry expired")
 	}
 	checksum, err := hashFile(filepath.Join(s.dir, e.Filename))
 	if err != nil || checksum != e.Checksum {
+		if s.pins[entryID] > 0 {
+			// A live restore owns this file; invalidation must not unlink
+			// it out from under the current owner. The entry leaves
+			// circulation and cleanup runs when the final pin is released.
+			s.invalid[entryID] = true
+			if err != nil {
+				return nil, err
+			}
+			return nil, errors.New("snapshot checksum mismatch; entry invalidated")
+		}
 		if invalidateErr := s.mutate(func() error {
 			_ = os.Remove(filepath.Join(s.dir, e.Filename))
 			delete(s.entries, entryID)
@@ -411,7 +446,8 @@ func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 }
 
 // Done releases a pin taken by RestoreReady. Expiry that was deferred while
-// the entry was in flight applies as soon as the last pin goes away.
+// the entry was in flight applies as soon as the last pin goes away, and so
+// does cleanup of a file that was found invalid while pinned (issue #22).
 func (s *cacheStore) Done(entryID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -420,7 +456,17 @@ func (s *cacheStore) Done(entryID string) {
 		return
 	}
 	delete(s.pins, entryID)
+	e := s.entries[entryID]
+	bad := s.invalid[entryID] && e != nil
 	_ = s.mutate(func() error {
+		if bad {
+			// The file was found invalid during the restore; its owner is
+			// gone, so unlink it now. A same-size tamper would otherwise
+			// survive reload validation, which only checks size.
+			_ = os.Remove(filepath.Join(s.dir, e.Filename))
+			delete(s.entries, entryID)
+			delete(s.invalid, entryID)
+		}
 		s.enforceLocked(s.now())
 		return nil
 	})

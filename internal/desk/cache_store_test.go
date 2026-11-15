@@ -367,12 +367,123 @@ func TestStoreInvalidFileCleanupHonorsPins(t *testing.T) {
 	if removed := store.Prune(); removed != 0 {
 		t.Fatalf("prune removed %d pinned entries", removed)
 	}
+	// While the pin is held the file must exist and the entry must stay
+	// tracked; it may only leave restore circulation.
+	if _, err = os.Stat(filepath.Join(store.dir, "corrupt.bin")); err != nil {
+		t.Fatal("prune unlinked a pinned snapshot mid-restore:", err)
+	}
+	if !store.HasEntry("corrupt") {
+		t.Fatal("pinned entry was dropped during prune")
+	}
+	if _, err = store.RestoreReady("corrupt"); err == nil {
+		t.Fatal("size-mismatched entry was offered to a new restore")
+	}
+	if candidates := store.Candidates(); len(candidates) != 0 {
+		t.Fatalf("invalid pinned entry still a candidate: %+v", candidates)
+	}
 	store.Done("corrupt")
 	if store.HasEntry("corrupt") {
 		t.Fatal("size-mismatched entry survived cleanup after Done")
 	}
 	if _, err = os.Stat(filepath.Join(store.dir, "corrupt.bin")); !os.IsNotExist(err) {
 		t.Fatal("size-mismatched snapshot file left behind after Done")
+	}
+}
+
+func TestStoreInvalidCleanupWaitsForFinalPin(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSnapshot(t, store.dir, "shared", []byte("ten bytes!"))
+	if _, err = store.Publish("shared", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("shared"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("shared"); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(store.dir, "shared.bin"), []byte("changed!!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if removed := store.Prune(); removed != 0 {
+		t.Fatalf("prune removed %d pinned entries", removed)
+	}
+	// The first release must keep the file for the second live owner.
+	store.Done("shared")
+	if _, err = os.Stat(filepath.Join(store.dir, "shared.bin")); err != nil {
+		t.Fatal("first Done unlinked a file another pin still owns:", err)
+	}
+	if !store.HasEntry("shared") {
+		t.Fatal("entry vanished while a pin was still live")
+	}
+	if _, err = store.RestoreReady("shared"); err == nil {
+		t.Fatal("invalid entry was offered to a new restore")
+	}
+	// The final release runs the deferred cleanup.
+	store.Done("shared")
+	if store.HasEntry("shared") {
+		t.Fatal("entry survived the final pin release")
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "shared.bin")); !os.IsNotExist(err) {
+		t.Fatal("invalid snapshot file left behind after the final Done")
+	}
+}
+
+func TestStoreChecksumInvalidationHonorsPins(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSnapshot(t, store.dir, "tampered", []byte("original!!"))
+	if _, err = store.Publish("tampered", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("tampered"); err != nil {
+		t.Fatal(err)
+	}
+	// Same size, different content, while the first restore still owns the
+	// file: invalidation must reject new restores but never unlink it.
+	if err = os.WriteFile(filepath.Join(store.dir, "tampered.bin"), []byte("modified!!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("tampered"); err == nil || !strings.Contains(err.Error(), "checksum") {
+		t.Fatalf("expected checksum rejection, got %v", err)
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "tampered.bin")); err != nil {
+		t.Fatal("checksum invalidation unlinked a pinned snapshot:", err)
+	}
+	if !store.HasEntry("tampered") {
+		t.Fatal("pinned entry vanished on invalidation")
+	}
+	if candidates := store.Candidates(); len(candidates) != 0 {
+		t.Fatalf("invalid entry still a candidate: %+v", candidates)
+	}
+	// The invalid mark must survive maintenance reloads: size checks alone
+	// cannot see a same-size tamper.
+	if removed := store.Prune(); removed != 0 {
+		t.Fatalf("prune removed %d pinned entries", removed)
+	}
+	if _, err = store.RestoreReady("tampered"); err == nil {
+		t.Fatal("invalid mark was lost across a maintenance reload")
+	}
+	store.Done("tampered")
+	if store.HasEntry("tampered") {
+		t.Fatal("checksum-invalid entry survived cleanup after Done")
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "tampered.bin")); !os.IsNotExist(err) {
+		t.Fatal("checksum-invalid snapshot file left behind after Done")
+	}
+	reopened, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.HasEntry("tampered") {
+		t.Fatal("invalidated entry reloaded after restart")
 	}
 }
 
