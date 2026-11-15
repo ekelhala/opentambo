@@ -27,18 +27,21 @@ type fakeLlama struct {
 	t       *testing.T
 	saveDir string
 
-	mu           sync.Mutex
-	files        map[string][]byte
-	slotTokens   int
-	inflight     int
-	maxInflight  int
-	saveCalls    int
-	restoreCalls int
-	eraseCalls   int
-	generations  []map[string]any
-	rawBodies    [][]byte
-	failSave     bool
-	failRestore  bool
+	mu            sync.Mutex
+	files         map[string][]byte
+	slotTokens    int
+	inflight      int
+	maxInflight   int
+	saveCalls     int
+	restoreCalls  int
+	eraseCalls    int
+	generations   []map[string]any
+	rawBodies     [][]byte
+	failSave      bool
+	failRestore   bool
+	savePartial   bool          // write partial bytes to the temp file before failing
+	saveSlow      time.Duration // stall the save request (simulates an abandoned write)
+	saveNOverride int           // when set, report this n_saved instead of the token count
 }
 
 func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +139,9 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		f.saveCalls++
 		fail := f.failSave
 		tokens := f.slotTokens
+		partial := f.savePartial
+		slow := f.saveSlow
+		override := f.saveNOverride
 		f.mu.Unlock()
 		if fail {
 			w.WriteHeader(500)
@@ -145,7 +151,24 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 			w.WriteHeader(400)
 			return
 		}
+		if slow > 0 {
+			// A stalled save: partial bytes land immediately, then the
+			// request never completes before the caller's deadline.
+			contents := []byte(fmt.Sprintf("snapshot:%d", tokens))
+			_ = os.WriteFile(filepath.Join(f.saveDir, name), contents[:len(contents)/2], 0600)
+			select {
+			case <-time.After(slow):
+			case <-r.Context().Done():
+			}
+			return
+		}
 		contents := []byte(fmt.Sprintf("snapshot:%d", tokens))
+		if partial {
+			// A crashed writer: partial bytes on disk, then a failure.
+			_ = os.WriteFile(filepath.Join(f.saveDir, name), contents[:len(contents)/2], 0600)
+			w.WriteHeader(500)
+			return
+		}
 		if err := os.WriteFile(filepath.Join(f.saveDir, name), contents, 0600); err != nil {
 			w.WriteHeader(500)
 			return
@@ -153,7 +176,11 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		f.mu.Lock()
 		f.files[name] = contents
 		f.mu.Unlock()
-		writeJSON(w, map[string]any{"n_saved": tokens, "n_written": len(contents), "timings": map[string]any{"save_ms": 1.5}})
+		n := tokens
+		if override > 0 {
+			n = override
+		}
+		writeJSON(w, map[string]any{"n_saved": n, "n_written": len(contents), "timings": map[string]any{"save_ms": 1.5}})
 	case "restore":
 		name, _ := fields["filename"].(string)
 		f.mu.Lock()

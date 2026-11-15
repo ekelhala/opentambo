@@ -35,12 +35,14 @@ const (
 	defaultCacheMinReuseTokens = 256
 	// cacheLeaseWait bounds how long a request queues behind the slot owner.
 	cacheLeaseWait = 10 * time.Minute
-	// cacheSaveWait bounds post-response snapshot work before it is abandoned.
-	cacheSaveWait = 60 * time.Second
 	// cacheSettleWait bounds waiting for the slot to go idle after a
 	// disconnect or cancellation before releasing the lease.
 	cacheSettleWait = 5 * time.Second
 )
+
+// cacheSaveWait bounds post-response snapshot work before it is abandoned.
+// Tests shorten it to exercise the abandoned-write path.
+var cacheSaveWait = 60 * time.Second
 
 func (c *PromptCache) normalized() PromptCache {
 	spec := PromptCache{Enabled: c.Enabled}
@@ -337,20 +339,35 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	rc.setLive(req.tokens)
 
 	entryID := id()
-	saveCtx, cancel := context.WithTimeout(context.Background(), cacheSaveWait)
-	defer cancel()
-	saved, err := rc.client.saveSlot(saveCtx, chatSlot, entryID+".tmp")
-	if err != nil {
+	tmpName := entryID + ".tmp"
+	// Reserve the write budget before llama-server produces the snapshot:
+	// traffic that cannot fit inside the configured limits must never reach
+	// the volume as an unaccounted temp file.
+	if !rc.store.BeginTempWrite(entryID, rc.store.TempEstimate()) {
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		return
 	}
+	saveCtx, cancel := context.WithTimeout(context.Background(), cacheSaveWait)
+	defer cancel()
+	saved, err := rc.client.saveSlot(saveCtx, chatSlot, tmpName)
+	if err != nil {
+		rc.store.EndTempWrite(entryID)
+		_ = rc.store.RemoveTemp(tmpName)
+		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
+		return
+	}
+	// The reservation covered the write window; Publish re-accounts the
+	// committed snapshot size itself.
+	rc.store.EndTempWrite(entryID)
 	if saved.NSaved < len(req.tokens) {
 		// The saved state does not provably cover the indexed prefix.
+		_ = rc.store.RemoveTemp(tmpName)
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		_ = rc.client.eraseSlot(saveCtx, chatSlot)
 		return
 	}
 	if _, err := rc.store.Publish(entryID, req.tokens, saved.NSaved); err != nil {
+		_ = rc.store.RemoveTemp(tmpName)
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		return
 	}
