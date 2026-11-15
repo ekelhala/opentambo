@@ -299,15 +299,20 @@ func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 	return e, nil
 }
 
-// Done releases a pin taken by RestoreReady.
+// Done releases a pin taken by RestoreReady. Expiry that was deferred while
+// the entry was in flight applies as soon as the last pin goes away.
 func (s *cacheStore) Done(entryID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.pins[entryID] > 1 {
 		s.pins[entryID]--
-	} else {
-		delete(s.pins, entryID)
+		return
 	}
+	delete(s.pins, entryID)
+	_ = s.mutate(func() error {
+		s.enforceLocked(s.now())
+		return nil
+	})
 }
 
 // Touch records successful use for LRU ordering and persists metadata.
@@ -415,9 +420,14 @@ func (s *cacheStore) Summary() (entries []PublicCacheEntry, used, budget int64) 
 }
 
 // enforceLocked applies TTL then LRU eviction to stay inside the budget.
-// Pinned entries are never evicted. Files of dropped entries are removed.
+// Pinned entries are never removed — expired or invalid files of in-flight
+// restores are dropped once Done releases the final pin (see Done). Files of
+// dropped entries are removed.
 func (s *cacheStore) enforceLocked(now time.Time) {
 	for id, e := range s.entries {
+		if s.pins[id] > 0 {
+			continue
+		}
 		expired := s.ttl > 0 && now.Sub(e.LastUsedAt) > s.ttl
 		info, err := os.Stat(filepath.Join(s.dir, e.Filename))
 		if expired || err != nil || info.Size() != e.Bytes {

@@ -311,3 +311,67 @@ func TestStoreRemoveTempValidation(t *testing.T) {
 		t.Fatalf("removing a missing temp must be a no-op: %v", err)
 	}
 }
+
+func TestStoreTTLPruneHonorsInFlightPins(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1_700_000_000, 0)
+	store.now = func() time.Time { return clock }
+	writeSnapshot(t, store.dir, "pinned", []byte("data"))
+	if _, err = store.Publish("pinned", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("pinned"); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(2 * time.Minute)
+	if removed := store.Prune(); removed != 0 {
+		t.Fatalf("TTL prune removed %d entries while a snapshot was pinned", removed)
+	}
+	if !store.HasEntry("pinned") {
+		t.Fatal("pinned entry vanished during prune")
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "pinned.bin")); err != nil {
+		t.Fatal("prune deleted a snapshot file mid-restore:", err)
+	}
+	// Once the restore finishes, the expired entry is cleaned up.
+	store.Done("pinned")
+	if store.HasEntry("pinned") {
+		t.Fatal("expired entry survived the final pin release")
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "pinned.bin")); !os.IsNotExist(err) {
+		t.Fatal("expired snapshot file left behind after Done")
+	}
+}
+
+func TestStoreInvalidFileCleanupHonorsPins(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSnapshot(t, store.dir, "corrupt", []byte("ten bytes!"))
+	if _, err = store.Publish("corrupt", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.RestoreReady("corrupt"); err != nil {
+		t.Fatal(err)
+	}
+	// The file changes size under a pinned restore; maintenance must wait.
+	if err = os.WriteFile(filepath.Join(store.dir, "corrupt.bin"), []byte("changed!!"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if removed := store.Prune(); removed != 0 {
+		t.Fatalf("prune removed %d pinned entries", removed)
+	}
+	store.Done("corrupt")
+	if store.HasEntry("corrupt") {
+		t.Fatal("size-mismatched entry survived cleanup after Done")
+	}
+	if _, err = os.Stat(filepath.Join(store.dir, "corrupt.bin")); !os.IsNotExist(err) {
+		t.Fatal("size-mismatched snapshot file left behind after Done")
+	}
+}
