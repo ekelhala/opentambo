@@ -25,7 +25,7 @@ export interface CacheStats {
 
 export interface CacheView {
   requested: boolean
-  status: 'pending' | 'ready' | 'unsupported' | string
+  status: 'checking' | 'ready' | 'unsupported' | 'error'
   namespace?: string
   build?: string
   reason?: string

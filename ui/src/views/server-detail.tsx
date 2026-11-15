@@ -253,7 +253,15 @@ function CachePanel({ run }: { run: Run }) {
           </p>
         </div>
       )}
-      {cache.status === 'pending' && (
+      {cache.status === 'error' && (
+        <div className="callout callout-bad m-3 mb-0">
+          <WarnIcon />
+          <p className="break-all">
+            <strong>Prompt cache hit an error.</strong> {cache.reason || 'The cache could not keep the slot in a known state.'} Requests still run normally.
+          </p>
+        </div>
+      )}
+      {cache.status === 'checking' && (
         <p className="panel-body text-xs text-[var(--t-text-2)]">
           Verifying save/restore capability with the child server…
         </p>

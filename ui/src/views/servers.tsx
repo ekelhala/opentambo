@@ -8,11 +8,11 @@ export function CacheBadge({ cache }: { cache?: CacheView }) {
   if (!cache?.requested) return null
   if (cache.status === 'ready')
     return <span className="badge shrink-0">cache</span>
-  if (cache.status === 'pending')
+  if (cache.status === 'checking')
     return <span className="badge badge-info shrink-0">cache…</span>
   return (
     <span className="badge badge-warn shrink-0" title={cache.reason}>
-      no cache
+      {cache.status === 'error' ? 'cache error' : 'no cache'}
     </span>
   )
 }
