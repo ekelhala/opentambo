@@ -579,3 +579,66 @@ func TestCacheAPIManagementEndpoints(t *testing.T) {
 		t.Fatal(rec.Body.String())
 	}
 }
+
+// A/B/A regression: a long unrelated conversation B must not suppress the
+// valid disk restoration of A. The live-keep decision must compare the
+// verified live token prefix, not its length.
+func TestCacheABARestoresDespiteUnrelatedLiveState(t *testing.T) {
+	cases := []struct {
+		name       string
+		bContent   string
+		expectLive bool
+		expectHit  bool
+	}{
+		{"B longer than A", strings.Repeat("unrelated B ", 20), false, true},
+		{"B same length as A", "completely different", false, true},
+		{"B shorter than A", "tiny", false, true},
+		{"live unchanged control", "", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newCacheFixture(t)
+			a := chatBody(`[{"role":"user","content":"conversation A"}]`)
+			fx.post(t, a)
+			if len(fx.rc.store.Candidates()) == 0 {
+				t.Fatal("A was never published")
+			}
+			restoresBefore := fx.rc.summary().Stats.Restores
+			if tc.bContent != "" {
+				fx.post(t, chatBody(fmt.Sprintf(`[{"role":"user","content":%q}]`, tc.bContent)))
+			}
+			res := fx.post(t, a)
+			if res.StatusCode != 200 {
+				t.Fatalf("request failed: %d", res.StatusCode)
+			}
+			summary := fx.rc.summary()
+			switch {
+			case tc.expectHit && summary.Stats.Restores == restoresBefore:
+				t.Fatalf("A snapshot never restored after unrelated B: %+v", summary.Stats)
+			case tc.expectHit && summary.Stats.Hits == 0:
+				t.Fatalf("restore did not count as a hit: %+v", summary.Stats)
+			case !tc.expectHit && summary.Stats.Restores != restoresBefore:
+				t.Fatalf("unchanged live state was wrongly replaced by a restore: %+v", summary.Stats)
+			case !tc.expectHit && summary.Stats.LiveKept == 0:
+				t.Fatalf("expected a live-keep decision: %+v", summary.Stats)
+			}
+		})
+	}
+}
+
+// A live prefix that genuinely covers the incoming prompt must still win
+// over a shorter disk snapshot.
+func TestCacheKeepsLiveOnlyWhenPrefixActuallyMatches(t *testing.T) {
+	fx := newCacheFixture(t)
+	short := chatBody(`[{"role":"user","content":"ab"}]`)
+	fx.post(t, short) // publishes the short prefix, live = short tokens
+	extended := chatBody(`[{"role":"user","content":"abcdefghijklmnop"}]`)
+	fx.post(t, extended)
+	// The live slot now holds the extended conversation. Posting it again
+	// must keep live (its prefix covers the request), never restore.
+	restores := fx.rc.summary().Stats.Restores
+	fx.post(t, extended)
+	if got := fx.rc.summary().Stats.Restores; got != restores {
+		t.Fatal("restored from disk while the live prefix already matched")
+	}
+}

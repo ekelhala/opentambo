@@ -97,7 +97,7 @@ type RunCache struct {
 
 	nctx int // slot 0 context size confirmed by the capability probe
 
-	liveTokens int // verified prompt prefix live in slot 0, -1 = unknown
+	liveTokens []int32 // verified prompt prefix live in slot 0; nil = unknown
 
 	stats CacheStats
 }
@@ -132,7 +132,7 @@ type CacheSummary struct {
 }
 
 func newRunCache(spec PromptCache, namespace string, client *llamaClient, store *cacheStore) *RunCache {
-	return &RunCache{spec: spec, namespace: namespace, client: client, store: store, lease: make(chan struct{}, 1), status: "checking", liveTokens: -1}
+	return &RunCache{spec: spec, namespace: namespace, client: client, store: store, lease: make(chan struct{}, 1), status: "checking"}
 }
 
 func (rc *RunCache) summary() CacheSummary {
@@ -239,13 +239,16 @@ func (rc *RunCache) Prepare(ctx context.Context, endpoint string, body map[strin
 	live := rc.liveTokens
 	minReuse := rc.spec.MinReuseTokens
 	rc.mu.Unlock()
+	liveReusable := commonPrefixLen(live, req.tokens)
 	switch {
 	case match == nil:
 		// Cold: rely on live state if any (it cannot hurt; the engine itself
 		// reuses an exact token prefix).
 		plan.restored = false
-	case live >= len(match.PromptTokens):
-		// Live state is at least as useful as the best disk candidate.
+	case liveReusable >= len(match.PromptTokens):
+		// The verified live prefix is at least as useful as the best disk
+		// candidate. Identity matters: a long unrelated conversation shares
+		// no prefix and must not suppress restoring a matching snapshot.
 		rc.markStat(func(s *CacheStats) { s.LiveKept++ })
 		plan.restored = false
 	case len(match.PromptTokens) < minReuse:
@@ -329,7 +332,7 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 		return
 	}
 	req := plan.request
-	rc.setLive(len(req.tokens))
+	rc.setLive(req.tokens)
 
 	entryID := id()
 	saveCtx, cancel := context.WithTimeout(context.Background(), cacheSaveWait)
@@ -358,14 +361,29 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 
 func (rc *RunCache) invalidateLive() {
 	rc.mu.Lock()
-	rc.liveTokens = -1
+	rc.liveTokens = nil
 	rc.mu.Unlock()
 }
 
-func (rc *RunCache) setLive(tokens int) {
+func (rc *RunCache) setLive(tokens []int32) {
 	rc.mu.Lock()
 	rc.liveTokens = tokens
 	rc.mu.Unlock()
+}
+
+// commonPrefixLen returns the length of the shared leading tokens. A nil live
+// prefix (unknown state) shares nothing.
+func commonPrefixLen(live, tokens []int32) int {
+	n := len(live)
+	if len(tokens) < n {
+		n = len(tokens)
+	}
+	for i := 0; i < n; i++ {
+		if live[i] != tokens[i] {
+			return i
+		}
+	}
+	return n
 }
 
 func (rc *RunCache) invalidateEntry(entryID string) {
@@ -523,7 +541,7 @@ func (rc *RunCache) Probe(ctx context.Context) {
 	rc.build = buildInfo
 	rc.status = "ready"
 	rc.reason = ""
-	rc.liveTokens = -1
+	rc.liveTokens = nil
 	rc.mu.Unlock()
 }
 
