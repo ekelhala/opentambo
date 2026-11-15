@@ -17,7 +17,9 @@ import (
 )
 
 // PromptCache is the launch-level configuration. The feature defaults off;
-// when disabled nothing in the inference path changes.
+// when disabled nothing in the inference path changes. TTLSeconds is the
+// retention window since an entry's last successful use; expired entries are
+// excluded from lookup immediately and removed by later maintenance.
 type PromptCache struct {
 	Enabled        bool  `json:"enabled"`
 	MaxBytes       int64 `json:"max_bytes,omitempty"`

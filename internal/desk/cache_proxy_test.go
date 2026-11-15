@@ -642,3 +642,37 @@ func TestCacheKeepsLiveOnlyWhenPrefixActuallyMatches(t *testing.T) {
 		t.Fatal("restored from disk while the live prefix already matched")
 	}
 }
+
+// Idle-then-resume: after the retention window passes without maintenance,
+// the next matching request must go cold instead of restoring (and Touching)
+// the expired snapshot.
+func TestCacheExpiredSnapshotNotRestoredAfterIdle(t *testing.T) {
+	fx := newCacheFixture(t)
+	first := chatBody(`[{"role":"user","content":"aging conversation"}]`)
+	fx.post(t, first)
+	if len(fx.rc.store.Candidates()) == 0 {
+		t.Fatal("nothing published")
+	}
+	// A manager restart loses the live slot; the next owner consults disk.
+	restarted := newRunCache(fx.rc.spec, "ns", fx.rc.client, fx.rc.store)
+	restarted.status = "ready"
+	restarted.nctx = 4096
+	fx.app.mu.Lock()
+	fx.app.runs["run-1"].cache = restarted
+	fx.app.mu.Unlock()
+	// Idle far past the configured retention without any prune pass.
+	fx.rc.spec.TTLSeconds = 60
+	fx.rc.store.ttl = time.Minute
+	fx.rc.store.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
+	res := fx.post(t, first)
+	if res.StatusCode != 200 {
+		t.Fatalf("request failed: %d", res.StatusCode)
+	}
+	summary := restarted.summary()
+	if summary.Stats.Restores != 0 || summary.Stats.Hits != 0 {
+		t.Fatalf("expired snapshot was restored: %+v", summary.Stats)
+	}
+	if summary.Stats.Misses == 0 {
+		t.Fatalf("expired lookup did not count a miss: %+v", summary.Stats)
+	}
+}

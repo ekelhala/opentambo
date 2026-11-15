@@ -255,12 +255,19 @@ func (s *cacheStore) Publish(entryID string, tokens []int32, savedTokens int) (*
 	return entry, nil
 }
 
-// Candidates returns entries, longest indexed prefix first.
+// Candidates returns entries that are currently eligible for reuse, longest
+// indexed prefix first. Entries past their TTL are filtered at lookup so an
+// expired snapshot can never be restored or revived between maintenance
+// passes; the TTL is retention since last use (successful restores Touch).
 func (s *cacheStore) Candidates() []*CacheEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
 	out := make([]*CacheEntry, 0, len(s.entries))
 	for _, e := range s.entries {
+		if s.expiredLocked(e, now) {
+			continue
+		}
 		out = append(out, e)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -272,14 +279,23 @@ func (s *cacheStore) Candidates() []*CacheEntry {
 	return out
 }
 
-// RestoreReady verifies file presence and checksum, then pins the entry so
-// eviction cannot remove it mid-restore. The caller must call Done.
+// expiredLocked reports whether the entry exceeded its retention since last
+// use. A zero TTL never expires.
+func (s *cacheStore) expiredLocked(e *CacheEntry, now time.Time) bool {
+	return s.ttl > 0 && now.Sub(e.LastUsedAt) > s.ttl
+}
+
+// RestoreReady verifies file presence, expiry, and checksum, then pins the
+// entry so eviction cannot remove it mid-restore. The caller must call Done.
 func (s *cacheStore) RestoreReady(entryID string) (*CacheEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e := s.entries[entryID]
 	if e == nil {
 		return nil, errors.New("entry no longer present")
+	}
+	if s.expiredLocked(e, s.now()) {
+		return nil, errors.New("entry expired")
 	}
 	checksum, err := hashFile(filepath.Join(s.dir, e.Filename))
 	if err != nil || checksum != e.Checksum {
@@ -315,11 +331,13 @@ func (s *cacheStore) Done(entryID string) {
 	})
 }
 
-// Touch records successful use for LRU ordering and persists metadata.
+// Touch records successful use for LRU ordering and persists metadata. An
+// entry that already exceeded its retention is not revived.
 func (s *cacheStore) Touch(entryID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.entries[entryID] == nil {
+	e := s.entries[entryID]
+	if e == nil || s.expiredLocked(e, s.now()) {
 		return
 	}
 	now := s.now()
@@ -428,7 +446,7 @@ func (s *cacheStore) enforceLocked(now time.Time) {
 		if s.pins[id] > 0 {
 			continue
 		}
-		expired := s.ttl > 0 && now.Sub(e.LastUsedAt) > s.ttl
+		expired := s.expiredLocked(e, now)
 		info, err := os.Stat(filepath.Join(s.dir, e.Filename))
 		if expired || err != nil || info.Size() != e.Bytes {
 			_ = os.Remove(filepath.Join(s.dir, e.Filename))

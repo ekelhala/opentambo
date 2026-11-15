@@ -375,3 +375,44 @@ func TestStoreInvalidFileCleanupHonorsPins(t *testing.T) {
 		t.Fatal("size-mismatched snapshot file left behind after Done")
 	}
 }
+
+func TestStoreExpiryIsEnforcedAtLookup(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Unix(1_700_000_000, 0)
+	store.now = func() time.Time { return clock }
+	writeSnapshot(t, store.dir, "aging", []byte("data"))
+	if _, err = store.Publish("aging", []int32{1}, 1); err != nil {
+		t.Fatal(err)
+	}
+	// Nonexpired control: eligible before the TTL elapses.
+	if _, err = store.RestoreReady("aging"); err != nil {
+		t.Fatalf("fresh entry rejected: %v", err)
+	}
+	store.Done("aging")
+	if len(store.Candidates()) != 1 {
+		t.Fatal("fresh entry missing from candidates")
+	}
+	// Idle for twice the TTL without any maintenance pass.
+	clock = clock.Add(2 * time.Minute)
+	if candidates := store.Candidates(); len(candidates) != 0 {
+		t.Fatalf("expired entry still a candidate: %+v", candidates)
+	}
+	if _, err = store.RestoreReady("aging"); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expired entry restored without rejection: %v", err)
+	}
+	// The idle-then-resume revival path: a rejected restore and a later
+	// Touch must not reset the retention clock.
+	store.Touch("aging")
+	if candidates := store.Candidates(); len(candidates) != 0 {
+		t.Fatal("Touch revived an expired entry")
+	}
+	// Expiry is not resurrection: the entry keeps expiring even if the
+	// index still carries it until maintenance runs.
+	if _, err = store.RestoreReady("aging"); err == nil {
+		t.Fatal("expired entry became restorable again after Touch")
+	}
+}
