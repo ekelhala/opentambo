@@ -44,10 +44,21 @@ func parseCacheRequest(endpoint string, body map[string]any) *cacheRequest {
 	if !eligibleCacheEndpoint(endpoint) {
 		return nil
 	}
-	if n, ok := body["n"]; ok {
-		number, isNumber := n.(float64)
-		if !isNumber || number != 1 {
-			return nil // one completion per request only
+	if raw, present := body["n"]; present {
+		// Bodies reach here decoded with UseNumber (exact literals); accept
+		// json.Number as well as plain float64 maps for direct callers.
+		switch value := raw.(type) {
+		case json.Number:
+			number, err := value.Float64()
+			if err != nil || number != 1 {
+				return nil // one completion per request only
+			}
+		case float64:
+			if value != 1 {
+				return nil
+			}
+		default:
+			return nil
 		}
 	}
 	req := &cacheRequest{endpoint: endpoint}

@@ -85,7 +85,12 @@ func (a *App) proxyInference(w http.ResponseWriter, r *http.Request) {
 		}
 		defer coordinator.release()
 		var fields map[string]any
-		if err = json.Unmarshal(body, &fields); err != nil {
+		// UseNumber keeps JSON integers as exact literals; decoding into
+		// float64 would silently rewrite values beyond 2^53 when the body is
+		// re-marshaled with manager controls.
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		if err = decoder.Decode(&fields); err != nil {
 			proxyError(w, 400, "invalid_request_error", "provide a JSON object")
 			return
 		}

@@ -36,6 +36,7 @@ type fakeLlama struct {
 	restoreCalls int
 	eraseCalls   int
 	generations  []map[string]any
+	rawBodies    [][]byte
 	failSave     bool
 	failRestore  bool
 }
@@ -44,6 +45,16 @@ func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	var fields map[string]any
 	_ = json.Unmarshal(body, &fields)
+	// Proxy-forwarded requests carry a model name; capture the exact bytes so
+	// tests can assert on byte-level fidelity (JSON integers, field order of
+	// unknown fields).
+	if fields != nil {
+		if _, hasModel := fields["model"]; hasModel {
+			f.mu.Lock()
+			f.rawBodies = append(f.rawBodies, append([]byte(nil), body...))
+			f.mu.Unlock()
+		}
+	}
 	switch r.URL.Path {
 	case "/props":
 		writeJSON(w, map[string]any{"build_info": "12345 abcdef", "total_slots": 1})
