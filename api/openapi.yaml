@@ -1,0 +1,831 @@
+# Openentambo's authoritative API contract.
+#
+# This file is the single source of truth for every HTTP contract whose
+# semantics opentambo owns. Go transport types (internal/desk/api) and
+# TypeScript API types (ui/src/lib/api.gen.ts) are generated from it with
+# `make generate-api`; do not edit the generated files or handwrite wire-type
+# duplicates. See docs/api-contracts.md for the ownership rule and workflow.
+#
+# The OpenAI-compatible /v1/* proxy surface deliberately has NO schema here:
+# it is governed by the external OpenAI compatibility contract and must keep
+# arbitrary request fields, upstream errors, streaming/SSE and cancellation
+# unconstrained by this management schema.
+openapi: 3.0.3
+info:
+  title: opentambo management API
+  description: >-
+    Management API for the opentambo single-binary model server manager:
+    state, model downloads, Hugging Face repository browsing, model-file
+    management, managed llama-server runs (lifecycle, logs, health) and
+    prompt-cache administration, plus owned service health endpoints.
+    This API ships without authentication by design; access control belongs
+    in the operator's reverse proxy. Mutations are guarded against
+    cross-origin requests.
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /api/state:
+    get:
+      operationId: getState
+      summary: Full management snapshot (settings, models, catalog, jobs, runs, profiles)
+      responses:
+        "200":
+          description: Current state snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/State"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/downloads:
+    post:
+      operationId: addDownloads
+      summary: Queue GGUF downloads from Hugging Face
+      description: >-
+        Provide either repo plus files (and an optional revision), or fully
+        resolved urls. Mixing both is rejected. Each URL must be an
+        https://huggingface.co/owner/repo/resolve/revision/file.gguf URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadRequest"
+      responses:
+        "202":
+          description: Jobs accepted and queued
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/downloads/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    post:
+      operationId: cancelDownload
+      summary: Cancel (pause) a queued or running download
+      responses:
+        "202":
+          description: Cancel requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accepted"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/downloads/{id}/resume:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    post:
+      operationId: resumeDownload
+      summary: Resume an interrupted, failed or cancelled download
+      responses:
+        "202":
+          description: Resume requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accepted"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/repository:
+    get:
+      operationId: browseRepository
+      summary: List GGUF quantizations offered by a public Hugging Face repository
+      parameters:
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Repository as owner/name
+        - name: revision
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Branch, tag or commit without slashes (defaults to main)
+      responses:
+        "200":
+          description: Quantization groups with their files
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryListing"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/models:
+    delete:
+      operationId: deleteModel
+      summary: Delete a model file from the shelf
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Model path relative to the models directory (must end in .gguf)
+      responses:
+        "200":
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deleted"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/runs:
+    post:
+      operationId: launchRun
+      summary: Launch a managed llama-server process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Launch"
+      responses:
+        "201":
+          description: Process started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/runs/{id}/stop:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    post:
+      operationId: stopRun
+      summary: Stop a managed llama-server process
+      responses:
+        "202":
+          description: Stop requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Accepted"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/runs/{id}/logs:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      operationId: getRunLogs
+      summary: Buffered stdout/stderr of a managed process (last 128 KiB)
+      responses:
+        "200":
+          description: Log text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Logs"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/runs/{id}/health:
+    parameters:
+      - $ref: "#/components/parameters/RunID"
+    get:
+      operationId: getRunHealth
+      summary: Health of a managed process, proxied from its child /health endpoint
+      description: >-
+        When the run is not running, only status is set. When the child could
+        not be reached, status is unreachable with detail. Otherwise the
+        child's HTTP status and JSON response body are passed through.
+      responses:
+        "200":
+          description: Health view (see description for the three shapes)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunHealth"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/cache:
+    get:
+      operationId: getCache
+      summary: Prompt-cache administration summary across known namespaces
+      description: >-
+        Sanitized metadata only: snapshot bytes and prompt token IDs never
+        leave the server.
+      responses:
+        "200":
+          description: Namespace summaries plus current defaults
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CacheReport"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/cache/{id}:
+    delete:
+      operationId: deleteCacheEntry
+      summary: Delete a prompt-cache snapshot by entry ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Snapshot deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deleted"
+        "404":
+          description: No such cache entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Entry is in use and cannot be deleted right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/cache/prune:
+    post:
+      operationId: pruneCache
+      summary: Remove expired and over-budget prompt-cache snapshots
+      responses:
+        "200":
+          description: Number of snapshots removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PruneResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /health:
+    get:
+      operationId: health
+      summary: Service health (compatible with an existing Pangolin Manager health target)
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Service health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+components:
+  parameters:
+    JobID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    RunID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Error:
+      description: Request rejected
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    Accepted:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+    Deleted:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: boolean
+    Logs:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: string
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Model:
+      type: object
+      description: A GGUF file on disk, relative to the models directory
+      required: [path, size, modified]
+      properties:
+        path:
+          type: string
+        size:
+          type: integer
+          format: int64
+        modified:
+          type: string
+          format: date-time
+    Quantization:
+      type: object
+      required: [label, family, primary, files, size, shards, modified, projection]
+      properties:
+        label:
+          type: string
+          description: e.g. Q4_K_M; empty when filenames carry no quant tag
+        family:
+          type: string
+        primary:
+          type: string
+          description: Launch target (the first shard)
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/Model"
+        size:
+          type: integer
+          format: int64
+        shards:
+          type: integer
+        modified:
+          type: string
+          format: date-time
+        projection:
+          type: boolean
+          description: mmproj vision companion, not launchable on its own
+    CatalogModel:
+      type: object
+      required: [repo, path, quantizations, size, modified]
+      properties:
+        repo:
+          type: string
+          description: owner/name, or a derived name for loose files
+        path:
+          type: string
+          description: Repository directory relative to the model root
+        quantizations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quantization"
+        size:
+          type: integer
+          format: int64
+        modified:
+          type: string
+          format: date-time
+    RepositoryFile:
+      type: object
+      required: [name, size]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          format: int64
+    RepositoryQuantization:
+      type: object
+      required: [label, family, files, size, shards, projection]
+      properties:
+        label:
+          type: string
+        family:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryFile"
+        size:
+          type: integer
+          format: int64
+        shards:
+          type: integer
+        projection:
+          type: boolean
+    RepositoryListing:
+      type: object
+      required: [repo, revision, quantizations]
+      properties:
+        repo:
+          type: string
+        revision:
+          type: string
+        quantizations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryQuantization"
+    JobStatus:
+      type: string
+      description: >-
+        Download lifecycle. cancelled and interrupted are resumable
+        (Resume); completed is terminal.
+      enum: [queued, downloading, completed, cancelled, interrupted, failed]
+    Job:
+      type: object
+      required: [id, url, file, status, bytes, total, bytes_per_second, created]
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        file:
+          type: string
+          description: Destination path relative to the models directory
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        bytes:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+          description: Total size once known; -1 when unknown
+        bytes_per_second:
+          type: number
+          format: double
+        error:
+          type: string
+        etag:
+          type: string
+          description: Validator for safe resume
+        created:
+          type: string
+          format: date-time
+    PromptCache:
+      type: object
+      description: >-
+        Launch-level prompt-cache configuration. Unset (or zero) optional
+        limits select the server defaults reported by /api/cache.
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        max_bytes:
+          type: integer
+          format: int64
+        max_entry_bytes:
+          type: integer
+          format: int64
+        ttl_seconds:
+          type: integer
+          format: int64
+        min_reuse_tokens:
+          type: integer
+    CacheDefaults:
+      type: object
+      description: Server-side defaults applied to unset PromptCache limits
+      required: [max_bytes, max_entry_bytes, ttl_seconds, min_reuse_tokens]
+      properties:
+        max_bytes:
+          type: integer
+          format: int64
+        max_entry_bytes:
+          type: integer
+          format: int64
+        ttl_seconds:
+          type: integer
+          format: int64
+        min_reuse_tokens:
+          type: integer
+    PromptCacheDefaults:
+      allOf:
+        - $ref: "#/components/schemas/CacheDefaults"
+        - type: object
+          required: [enabled]
+          properties:
+            enabled:
+              type: boolean
+    CacheStatus:
+      type: string
+      description: >-
+        Prompt-cache coordinator state. checking: the capability probe is
+        still running; ready: save/restore are operational; unsupported: the
+        build cannot persist cache state and requests run uncached; error: a
+        slot-safety failure stopped the coordinator (manual restart needed).
+      enum: [checking, ready, unsupported, error]
+    CacheStats:
+      type: object
+      required:
+        - requests
+        - hits
+        - misses
+        - live_kept
+        - bypassed
+        - saves
+        - save_failures
+        - restores
+        - restore_failures
+        - queue_timeouts
+        - restore_ms_total
+        - save_ms_total
+        - bytes_restored
+        - bytes_saved
+      properties:
+        requests:
+          type: integer
+          format: int64
+        hits:
+          type: integer
+          format: int64
+        misses:
+          type: integer
+          format: int64
+        live_kept:
+          type: integer
+          format: int64
+        bypassed:
+          type: integer
+          format: int64
+        saves:
+          type: integer
+          format: int64
+        save_failures:
+          type: integer
+          format: int64
+        restores:
+          type: integer
+          format: int64
+        restore_failures:
+          type: integer
+          format: int64
+        queue_timeouts:
+          type: integer
+          format: int64
+        restore_ms_total:
+          type: integer
+          format: int64
+        save_ms_total:
+          type: integer
+          format: int64
+        bytes_restored:
+          type: integer
+          format: int64
+        bytes_saved:
+          type: integer
+          format: int64
+    CacheSummary:
+      type: object
+      description: Sanitized public view of a run's prompt-cache coordinator
+      required: [requested, status, stats]
+      properties:
+        requested:
+          type: boolean
+        status:
+          $ref: "#/components/schemas/CacheStatus"
+        reason:
+          type: string
+        namespace:
+          type: string
+        build:
+          type: string
+          description: llama-server build reported by the capability probe
+        min_reuse_tokens:
+          type: integer
+        max_bytes:
+          type: integer
+          format: int64
+        stats:
+          $ref: "#/components/schemas/CacheStats"
+    Launch:
+      type: object
+      description: Configuration for one managed llama-server process
+      required: [name, model, context, gpu_layers, port, args, env]
+      properties:
+        name:
+          type: string
+          description: Alias served through the gateway; unique among running servers
+        model:
+          type: string
+          description: Model path relative to the models directory
+        context:
+          type: integer
+        gpu_layers:
+          type: integer
+        port:
+          type: integer
+          description: Loopback port (1024-65535)
+        args:
+          type: array
+          items:
+            type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        prompt_cache:
+          nullable: true
+          x-go-type-skip-optional-pointer: false
+          $ref: "#/components/schemas/PromptCache"
+    RunStatus:
+      type: string
+      enum: [running, stopping, stopped, failed]
+    Run:
+      type: object
+      required: [id, launch, command, pid, status, started]
+      properties:
+        id:
+          type: string
+        launch:
+          $ref: "#/components/schemas/Launch"
+        command:
+          type: array
+          items:
+            type: string
+        pid:
+          type: integer
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        started:
+          type: string
+          format: date-time
+        ended:
+          type: string
+          format: date-time
+          nullable: true
+          x-go-type-skip-optional-pointer: false
+        error:
+          type: string
+        cache:
+          nullable: true
+          x-go-type-skip-optional-pointer: false
+          description: Prompt-cache summary; absent unless the run was launched with the cache configured
+          allOf:
+            - $ref: "#/components/schemas/CacheSummary"
+    RunHealthStatus:
+      type: string
+      description: Managed run status, or unreachable when the child /health probe failed
+      enum: [running, stopping, stopped, failed, unreachable]
+    RunHealth:
+      type: object
+      description: >-
+        One of three shapes: {status} for a run that is not running,
+        {status, detail} when the child is unreachable, or
+        {http_status, response} passing through the child's own health reply.
+      properties:
+        status:
+          $ref: "#/components/schemas/RunHealthStatus"
+        detail:
+          type: string
+        http_status:
+          type: integer
+        response:
+          type: object
+          additionalProperties: true
+    CacheEntry:
+      type: object
+      description: >-
+        Sanitized snapshot metadata. Prompt token IDs and server-side
+        filenames are never exposed.
+      required: [id, namespace, saved_tokens, prefix_tokens, bytes, created_at, last_used_at]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        saved_tokens:
+          type: integer
+        prefix_tokens:
+          type: integer
+          description: Count of verified prompt prefix tokens; the IDs stay private
+        bytes:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+    CacheNamespaceRun:
+      type: object
+      required: [run_id, model, run_status, cache]
+      properties:
+        run_id:
+          type: string
+        model:
+          type: string
+        run_status:
+          $ref: "#/components/schemas/RunStatus"
+        cache:
+          $ref: "#/components/schemas/CacheSummary"
+    CacheNamespace:
+      type: object
+      required: [namespace, entries, bytes_used, max_bytes, runs]
+      properties:
+        namespace:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CacheEntry"
+        bytes_used:
+          type: integer
+          format: int64
+        max_bytes:
+          type: integer
+          format: int64
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/CacheNamespaceRun"
+    CacheReport:
+      type: object
+      required: [namespaces, defaults]
+      properties:
+        namespaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/CacheNamespace"
+        defaults:
+          $ref: "#/components/schemas/CacheDefaults"
+    PruneResult:
+      type: object
+      required: [removed]
+      properties:
+        removed:
+          type: integer
+    StateSettings:
+      type: object
+      required: [models, binary, parallel_downloads, prompt_cache_defaults]
+      properties:
+        models:
+          type: string
+          description: Models directory served by this manager
+        binary:
+          type: string
+          description: llama-server binary path or name
+        parallel_downloads:
+          type: integer
+        prompt_cache_defaults:
+          $ref: "#/components/schemas/PromptCacheDefaults"
+    State:
+      type: object
+      required: [settings, models, catalog, jobs, runs, profiles]
+      properties:
+        settings:
+          $ref: "#/components/schemas/StateSettings"
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/Model"
+        catalog:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogModel"
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Job"
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Run"
+        profiles:
+          type: object
+          description: Last-used launch configuration per model path
+          additionalProperties:
+            $ref: "#/components/schemas/Launch"
+    DownloadRequest:
+      type: object
+      description: >-
+        Provide repo plus files (optionally revision), or urls. Mixing both
+        is rejected.
+      properties:
+        repo:
+          type: string
+        files:
+          type: array
+          items:
+            type: string
+        revision:
+          type: string
+        urls:
+          type: array
+          items:
+            type: string
