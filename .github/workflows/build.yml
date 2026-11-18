@@ -19,14 +19,14 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: test -z "$(gofmt -l cmd internal)"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Regenerate API types and fail on drift
         run: |
           go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.2 -config api/oapi-codegen.yaml api/openapi.yaml
           (cd tools/tsgen && bun install --frozen-lockfile && bun run generate)
           git diff --exit-code internal/desk/api/gen.go ui/src/lib/api.gen.ts
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
       - name: Web UI tests
         working-directory: ui
         run: |
