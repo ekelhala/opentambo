@@ -1,0 +1,14 @@
+{
+  "name": "opentambo-api-tsgen",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Generates ui/src/lib/api.gen.ts from api/openapi.yaml. Isolated from the UI's TypeScript 7 toolchain because openapi-typescript 7 drives the TypeScript 5 compiler API.",
+  "scripts": {
+    "generate": "openapi-typescript ../../api/openapi.yaml -o ../../ui/src/lib/api.gen.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

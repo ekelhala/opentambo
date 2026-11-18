@@ -4,5 +4,6 @@
 *.part
 /.env
 ui/node_modules/
+tools/tsgen/node_modules/
 # Web UI build output; embedded into the binary at build time (make build)
 /internal/desk/web/
