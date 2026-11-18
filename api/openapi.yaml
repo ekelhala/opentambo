@@ -1,4 +1,4 @@
-# Openentambo's authoritative API contract.
+# Opentambo's authoritative API contract.
 #
 # This file is the single source of truth for every HTTP contract whose
 # semantics opentambo owns. Go transport types (internal/desk/api) and
