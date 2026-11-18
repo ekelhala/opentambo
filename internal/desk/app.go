@@ -246,15 +246,17 @@ type jsonMissWriter struct {
 }
 
 func (w *jsonMissWriter) WriteHeader(status int) {
-	if (status == http.StatusNotFound || status == http.StatusMethodNotAllowed) &&
-		w.Header().Get("Content-Type") == "" {
-		// The mux is answering a routing miss; serve the contract's body.
-		w.Header().Set("Content-Type", "application/json")
-		w.ResponseWriter.WriteHeader(status)
-		w.missed = true
-		body, _ := json.Marshal(api.Error{Error: strings.ToLower(http.StatusText(status))})
-		_, _ = w.ResponseWriter.Write(body)
-		return
+	if status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
+		ct := w.Header().Get("Content-Type")
+		if ct == "" || strings.HasPrefix(ct, "text/plain") {
+			// The mux is answering a routing miss; serve the contract's body.
+			w.Header().Set("Content-Type", "application/json")
+			w.ResponseWriter.WriteHeader(status)
+			w.missed = true
+			body, _ := json.Marshal(api.Error{Error: strings.ToLower(http.StatusText(status))})
+			_, _ = w.ResponseWriter.Write(body)
+			return
+		}
 	}
 	w.ResponseWriter.WriteHeader(status)
 }
