@@ -5,7 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
 // Files on disk grouped the way users think about them: a model is the
@@ -13,24 +14,10 @@ import (
 // per quantization. Shards of a split quantization belong to the same group
 // and Primary is the file to hand to llama-server, which loads the
 // remaining shards from the split metadata inside it.
-type CatalogModel struct {
-	Repo          string         `json:"repo"` // "owner/name", or a derived name for loose files
-	Path          string         `json:"path"` // repository directory relative to the model root
-	Quantizations []Quantization `json:"quantizations"`
-	Size          int64          `json:"size"`
-	Modified      time.Time      `json:"modified"`
-}
+// CatalogModel groups GGUF files by Hugging Face repository and quantization.
+type CatalogModel = api.CatalogModel
 
-type Quantization struct {
-	Label      string    `json:"label"` // e.g. "Q4_K_M"; empty when the filename carries no quant tag
-	Family     string    `json:"family"`
-	Primary    string    `json:"primary"` // launch target: the first shard
-	Files      []Model   `json:"files"`
-	Size       int64     `json:"size"`
-	Shards     int       `json:"shards"`
-	Modified   time.Time `json:"modified"`
-	Projection bool      `json:"projection"` // mmproj vision companion, not launchable on its own
-}
+type Quantization = api.Quantization
 
 var (
 	shardSuffix = regexp.MustCompile(`(?i)[-_.]\d{5}-of-\d{5}$`)

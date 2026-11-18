@@ -36,11 +36,11 @@ func TestModelMetaOf(t *testing.T) {
 func TestCatalogGroupsRepositoriesQuantizationsAndShards(t *testing.T) {
 	now := time.Now()
 	models := []Model{
-		{"bartowski/repo-a/main/Q8_0/repo-a-Q8_0-00002-of-00002.gguf", 300, now},
-		{"bartowski/repo-a/main/Q8_0/repo-a-Q8_0-00001-of-00002.gguf", 400, now.Add(time.Second)},
-		{"bartowski/repo-a/main/repo-a-Q4_K_M.gguf", 200, now},
-		{"ggml-org/repo-b/main/model.gguf", 50, now},
-		{"loose-q2_k.gguf", 10, now},
+		{Path: "bartowski/repo-a/main/Q8_0/repo-a-Q8_0-00002-of-00002.gguf", Size: 300, Modified: now},
+		{Path: "bartowski/repo-a/main/Q8_0/repo-a-Q8_0-00001-of-00002.gguf", Size: 400, Modified: now.Add(time.Second)},
+		{Path: "bartowski/repo-a/main/repo-a-Q4_K_M.gguf", Size: 200, Modified: now},
+		{Path: "ggml-org/repo-b/main/model.gguf", Size: 50, Modified: now},
+		{Path: "loose-q2_k.gguf", Size: 10, Modified: now},
 	}
 	catalog := catalogFrom(models)
 	if len(catalog) != 3 {
@@ -73,11 +73,11 @@ func TestCatalogGroupsRepositoriesQuantizationsAndShards(t *testing.T) {
 
 func TestGroupRepositoryFiles(t *testing.T) {
 	groups := groupRepositoryFiles([]RepositoryFile{
-		{"Big-Model-Q4_K_M.gguf", 100},
-		{"Big-Model-IQ4_XS-00001-of-00003.gguf", 60},
-		{"Big-Model-IQ4_XS-00003-of-00003.gguf", 60},
-		{"Big-Model-IQ4_XS-00002-of-00003.gguf", 60},
-		{"README.md", 5},
+		{Name: "Big-Model-Q4_K_M.gguf", Size: 100},
+		{Name: "Big-Model-IQ4_XS-00001-of-00003.gguf", Size: 60},
+		{Name: "Big-Model-IQ4_XS-00003-of-00003.gguf", Size: 60},
+		{Name: "Big-Model-IQ4_XS-00002-of-00003.gguf", Size: 60},
+		{Name: "README.md", Size: 5},
 	})
 	if len(groups) != 2 {
 		t.Fatalf("groups: %+v", groups)

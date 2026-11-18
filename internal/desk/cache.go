@@ -14,19 +14,16 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
-// PromptCache is the launch-level configuration. The feature defaults off;
-// when disabled nothing in the inference path changes. TTLSeconds is the
-// retention window since an entry's last successful use; expired entries are
-// excluded from lookup immediately and removed by later maintenance.
-type PromptCache struct {
-	Enabled        bool  `json:"enabled"`
-	MaxBytes       int64 `json:"max_bytes,omitempty"`
-	MaxEntryBytes  int64 `json:"max_entry_bytes,omitempty"`
-	TTLSeconds     int64 `json:"ttl_seconds,omitempty"`
-	MinReuseTokens int   `json:"min_reuse_tokens,omitempty"`
-}
+// PromptCache is the launch-level configuration wire type generated from
+// api/openapi.yaml. The feature defaults off; when disabled nothing in the
+// inference path changes. TTLSeconds is the retention window since an
+// entry's last successful use; expired entries are excluded from lookup
+// immediately and removed by later maintenance.
+type PromptCache = api.PromptCache
 
 const (
 	defaultCacheMaxBytes       = 4 << 30
@@ -46,7 +43,7 @@ var (
 	cacheSettleWait = 5 * time.Second
 )
 
-func (c *PromptCache) normalized() PromptCache {
+func normalizedPromptCache(c PromptCache) PromptCache {
 	spec := PromptCache{Enabled: c.Enabled}
 	spec.MaxBytes = defaultCacheMaxBytes
 	if c.MaxBytes > 0 {
@@ -67,15 +64,15 @@ func (c *PromptCache) normalized() PromptCache {
 	return spec
 }
 
-// validate rejects nonsensical configurations before a child starts.
-func (c *PromptCache) validate() error {
+// validatePromptCache rejects nonsensical configurations before a child starts.
+func validatePromptCache(c *PromptCache) error {
 	if c == nil || !c.Enabled {
 		return nil
 	}
 	if c.MaxBytes < 0 || c.MaxEntryBytes < 0 || c.TTLSeconds < 0 || c.MinReuseTokens < 0 {
 		return errors.New("prompt cache limits cannot be negative")
 	}
-	spec := c.normalized()
+	spec := normalizedPromptCache(*c)
 	if spec.MaxEntryBytes > spec.MaxBytes {
 		return errors.New("prompt cache max_entry_bytes cannot exceed max_bytes")
 	}
@@ -97,7 +94,7 @@ type RunCache struct {
 	// lease is a one-slot channel that serializes slot-mutating traffic.
 	lease chan struct{}
 
-	status string // checking, ready, unsupported, error
+	status api.CacheStatus // generated enum: checking, ready, unsupported, error
 	reason string
 	build  string // llama-server build reported by the capability probe
 
@@ -114,43 +111,19 @@ type RunCache struct {
 	stats CacheStats
 }
 
-type CacheStats struct {
-	Requests        int64 `json:"requests"`
-	Hits            int64 `json:"hits"` // a disk snapshot was restored and used
-	Misses          int64 `json:"misses"`
-	LiveKept        int64 `json:"live_kept"` // live state was at least as useful as disk
-	Bypassed        int64 `json:"bypassed"`  // cache_prompt:false or ineligible traffic
-	Saves           int64 `json:"saves"`
-	SaveFailures    int64 `json:"save_failures"`
-	Restores        int64 `json:"restores"`
-	RestoreFailures int64 `json:"restore_failures"`
-	QueueTimeouts   int64 `json:"queue_timeouts"`
-	RestoreMsTotal  int64 `json:"restore_ms_total"`
-	SaveMsTotal     int64 `json:"save_ms_total"`
-	BytesRestored   int64 `json:"bytes_restored"`
-	BytesSaved      int64 `json:"bytes_saved"`
-}
-
-// CacheSummary is the public (sanitized) view of coordinator state.
-type CacheSummary struct {
-	Requested bool       `json:"requested"`
-	Status    string     `json:"status"`
-	Reason    string     `json:"reason,omitempty"`
-	Namespace string     `json:"namespace,omitempty"`
-	Build     string     `json:"build,omitempty"`
-	MinReuse  int        `json:"min_reuse_tokens,omitempty"`
-	MaxBytes  int64      `json:"max_bytes,omitempty"`
-	Stats     CacheStats `json:"stats"`
-}
+// CacheStats and CacheSummary are the generated wire types for coordinator
+// statistics and the public (sanitized) view of coordinator state.
+type CacheStats = api.CacheStats
+type CacheSummary = api.CacheSummary
 
 func newRunCache(spec PromptCache, namespace string, client *llamaClient, store *cacheStore) *RunCache {
-	return &RunCache{spec: spec, namespace: namespace, client: client, store: store, lease: make(chan struct{}, 1), status: "checking"}
+	return &RunCache{spec: spec, namespace: namespace, client: client, store: store, lease: make(chan struct{}, 1), status: api.CacheStatusChecking}
 }
 
 func (rc *RunCache) summary() CacheSummary {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	return CacheSummary{Requested: true, Status: rc.status, Reason: rc.reason, Namespace: rc.namespace, Build: rc.build, MinReuse: rc.spec.MinReuseTokens, MaxBytes: rc.spec.MaxBytes, Stats: rc.stats}
+	return CacheSummary{Requested: true, Status: rc.status, Reason: rc.reason, Namespace: rc.namespace, Build: rc.build, MinReuseTokens: rc.spec.MinReuseTokens, MaxBytes: rc.spec.MaxBytes, Stats: rc.stats}
 }
 
 // acquire takes the slot lease with cancellation and a bounded wait.

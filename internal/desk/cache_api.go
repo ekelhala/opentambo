@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
 // cacheStoreFor opens (or returns the cached) store for a namespace directory.
@@ -98,7 +100,7 @@ func (a *App) registryCacheStores() []*cacheStore {
 }
 
 func (a *App) cacheSummary(w http.ResponseWriter, r *http.Request) {
-	namespaces := []map[string]any{}
+	namespaces := []api.CacheNamespace{}
 	a.mu.Lock()
 	runs := make([]*Run, 0, len(a.runs))
 	for _, run := range a.runs {
@@ -107,16 +109,22 @@ func (a *App) cacheSummary(w http.ResponseWriter, r *http.Request) {
 	a.mu.Unlock()
 	for _, store := range a.registryCacheStores() {
 		entries, used, budget := store.Summary()
-		belongs := []map[string]any{}
+		belongs := []api.CacheNamespaceRun{}
 		for _, run := range runs {
 			if run.cache != nil && run.cache.store == store {
 				summary := run.cache.summary()
-				belongs = append(belongs, map[string]any{"run_id": run.ID, "model": run.Launch.Name, "run_status": run.Status, "cache": summary})
+				belongs = append(belongs, api.CacheNamespaceRun{RunID: run.ID, Model: run.Launch.Name, RunStatus: run.Status, Cache: summary})
 			}
 		}
-		namespaces = append(namespaces, map[string]any{"namespace": store.namespace, "entries": entries, "bytes_used": used, "max_bytes": budget, "runs": belongs})
+		namespaces = append(namespaces, api.CacheNamespace{Namespace: store.namespace, Entries: entries, BytesUsed: used, MaxBytes: budget, Runs: belongs})
 	}
-	respond(w, 200, map[string]any{"namespaces": namespaces, "defaults": map[string]any{"max_bytes": defaultCacheMaxBytes, "max_entry_bytes": defaultCacheMaxEntryBytes, "ttl_seconds": defaultCacheTTLSeconds, "min_reuse_tokens": defaultCacheMinReuseTokens}})
+	respond(w, 200, api.CacheReport{Namespaces: namespaces, Defaults: cacheDefaults()})
+}
+
+// cacheDefaults reports the server-side limits applied to unset PromptCache
+// options; state settings reuse the same source.
+func cacheDefaults() api.CacheDefaults {
+	return api.CacheDefaults{MaxBytes: defaultCacheMaxBytes, MaxEntryBytes: defaultCacheMaxEntryBytes, TTLSeconds: defaultCacheTTLSeconds, MinReuseTokens: defaultCacheMinReuseTokens}
 }
 
 func (a *App) cacheDelete(w http.ResponseWriter, r *http.Request) {
@@ -127,17 +135,17 @@ func (a *App) cacheDelete(w http.ResponseWriter, r *http.Request) {
 		}
 		deleted, err := store.Delete(entryID)
 		if err != nil {
-			respond(w, 409, map[string]string{"error": err.Error()})
+			respond(w, http.StatusConflict, api.Error{Error: err.Error()})
 			return
 		}
 		if !deleted {
-			http.NotFound(w, r)
+			jsonError(w, http.StatusNotFound, "no such cache entry")
 			return
 		}
-		respond(w, 200, map[string]bool{"deleted": true})
+		respond(w, 200, api.Deleted{Deleted: true})
 		return
 	}
-	http.NotFound(w, r)
+	jsonError(w, http.StatusNotFound, "no such cache entry")
 }
 
 func (a *App) cachePrune(w http.ResponseWriter, r *http.Request) {
@@ -152,5 +160,5 @@ func (a *App) cachePrune(w http.ResponseWriter, r *http.Request) {
 	for _, store := range a.registryCacheStores() {
 		removed += store.Prune()
 	}
-	respond(w, 200, map[string]int{"removed": removed})
+	respond(w, 200, api.PruneResult{Removed: removed})
 }

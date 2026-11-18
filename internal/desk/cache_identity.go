@@ -57,7 +57,7 @@ type cacheLaunch struct {
 // gate, and derives the namespace directory. It performs model file hashing
 // outside App.mu; only the small result crosses into the locked section.
 func (a *App) preparePromptCache(spec Launch) (*cacheLaunch, error) {
-	if err := spec.PromptCache.validate(); err != nil {
+	if err := validatePromptCache(spec.PromptCache); err != nil {
 		return nil, err
 	}
 	for _, arg := range spec.Args {
@@ -86,7 +86,7 @@ func (a *App) preparePromptCache(spec Launch) (*cacheLaunch, error) {
 	if err != nil {
 		return nil, err
 	}
-	normalized := spec.PromptCache.normalized()
+	normalized := normalizedPromptCache(*spec.PromptCache)
 	dir := filepath.Join(a.data, "prompt-cache", namespace)
 	store, err := a.cacheStoreFor(dir, namespace, normalized)
 	if err != nil {

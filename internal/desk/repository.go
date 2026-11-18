@@ -6,32 +6,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ekelhala/opentambo/internal/desk/api"
 	"github.com/gomlx/go-huggingface/hub"
 )
 
 // RepositoryFile and RepositoryQuantization describe what a Hugging Face
 // repository holds, grouped by quantization so users pick a level instead of
 // typing shard filenames. Files land in the shelf under the same rules as any
-// manual download.
-type RepositoryFile struct {
-	Name string `json:"name"`
-	Size int64  `json:"size"`
-}
-
-type RepositoryQuantization struct {
-	Label      string           `json:"label"` // e.g. "Q4_K_M"; empty when names carry no quant tag
-	Family     string           `json:"family"`
-	Files      []RepositoryFile `json:"files"`
-	Size       int64            `json:"size"`
-	Shards     int              `json:"shards"`
-	Projection bool             `json:"projection"` // mmproj vision companion
-}
-
-type repositoryListing struct {
-	Repo          string                   `json:"repo"`
-	Revision      string                   `json:"revision"`
-	Quantizations []RepositoryQuantization `json:"quantizations"`
-}
+// manual download. These are the generated transport records from
+// api/openapi.yaml.
+type RepositoryFile = api.RepositoryFile
+type RepositoryQuantization = api.RepositoryQuantization
+type repositoryListing = api.RepositoryListing
 
 // Group repository-relative GGUF names by quantization using the same naming
 // rules as the local catalog so both views agree. Non-GGUF names are ignored
