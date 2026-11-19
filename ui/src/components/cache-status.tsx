@@ -135,9 +135,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
     default: {
       const unhandled: never = cache.status
       return (
-        <p className="panel-body text-xs text-[var(--t-text-2)]">
-          Unknown prompt cache status: {String(unhandled)}
-        </p>
+        <p className="panel-body text-xs text-[var(--t-text-2)]">Unknown prompt cache status: {String(unhandled)}</p>
       )
     }
   }

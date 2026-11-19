@@ -1,20 +1,8 @@
 import { useState } from 'react'
 import { PlayIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api, type Launch, type State } from '@/lib/api'
 import { bytes, modelStem, shellQuote } from '@/lib/format'
 import { toast } from 'sonner'
@@ -44,7 +32,7 @@ function modelOptions(state: State): ModelOption[] {
         label: quant.label || quant.family || 'default',
         size: quant.size,
         shards: quant.shards,
-      }))
+      })),
   )
 }
 
@@ -71,7 +59,7 @@ export function LaunchDialog({
   const [env, setEnv] = useState(
     Object.entries(profile?.env || {})
       .map(([k, v]) => `${k}=${v}`)
-      .join('\n')
+      .join('\n'),
   )
   const [promptCache, setPromptCache] = useState(Boolean(profile?.prompt_cache?.enabled))
   const [busy, setBusy] = useState(false)
@@ -79,7 +67,10 @@ export function LaunchDialog({
   // profile's values through keeps "Run again" from silently resetting them.
   const savedCache = profile?.prompt_cache
 
-  const specArgs = args.split('\n').map((s) => s.trim()).filter(Boolean)
+  const specArgs = args
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
   const specName = name.trim() || (model ? modelStem(model) : 'model')
   const command = [
     state.settings.binary,
@@ -139,9 +130,7 @@ export function LaunchDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="dialog-title">Launch server</DialogTitle>
-          <p className="dialog-lede">
-            Your binary, your arguments. The command below is exactly what runs.
-          </p>
+          <p className="dialog-lede">Your binary, your arguments. The command below is exactly what runs.</p>
         </DialogHeader>
         <form onSubmit={submit} className="grid gap-4">
           <div className="field">
@@ -255,9 +244,9 @@ export function LaunchDialog({
             <span>
               <span className="f-label">Persistent prompt cache</span>
               <p className="mt-0.5 text-[var(--t-text-2)]">
-                Save and restore KV state on disk so conversations can resume across app switches
-                and server restarts. Serializes requests to this server and manages{' '}
-                <span className="mono">--slot-save-path</span> automatically.
+                Save and restore KV state on disk so conversations can resume across app switches and server restarts.
+                Serializes requests to this server and manages <span className="mono">--slot-save-path</span>{' '}
+                automatically.
               </p>
             </span>
           </label>
@@ -282,7 +271,6 @@ export function LaunchDialog({
 function nextPort(state: State): number {
   let port = 8080
   for (const run of state.runs)
-    if ((run.status === 'running' || run.status === 'stopping') && run.launch.port >= port)
-      port = run.launch.port + 1
+    if ((run.status === 'running' || run.status === 'stopping') && run.launch.port >= port) port = run.launch.port + 1
   return port
 }

@@ -38,12 +38,7 @@ export function BarChart({ values, height = 190 }: { values: number[]; height?: 
   const max = Math.max(...values) || 1
   const bw = width / values.length
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{ width: '100%', height }}
-      aria-hidden
-    >
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height }} aria-hidden>
       {values.map((v, i) => {
         const h = (v / max) * (height - 8)
         return (
@@ -71,27 +66,12 @@ export function AreaChart({ values, height = 150 }: { values: number[]; height?:
     )
   const width = 640
   const max = Math.max(...values) || 1
-  const points = values.map((v, i) => [
-    (i * width) / (values.length - 1),
-    height - 4 - (v / max) * (height - 12),
-  ])
+  const points = values.map((v, i) => [(i * width) / (values.length - 1), height - 4 - (v / max) * (height - 12)])
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('')
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{ width: '100%', height }}
-      aria-hidden
-    >
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height }} aria-hidden>
       {[0.25, 0.5, 0.75].map((f) => (
-        <line
-          key={f}
-          x1={0}
-          x2={width}
-          y1={height * f}
-          y2={height * f}
-          className="chart-grid"
-        />
+        <line key={f} x1={0} x2={width} y1={height * f} y2={height * f} className="chart-grid" />
       ))}
       <path d={`${line} L ${width} ${height} L 0 ${height} Z`} className="chart-area" />
       <path d={line} className="chart-line" />

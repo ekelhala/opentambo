@@ -21,12 +21,7 @@ const CHIPS: { id: Series; label: string }[] = [
   { id: 'jobs', label: 'jobs' },
 ]
 
-const SEGMENT_COLORS = [
-  'var(--t-accent)',
-  'var(--t-accent-ink)',
-  'var(--t-text-3)',
-  'var(--t-line)',
-]
+const SEGMENT_COLORS = ['var(--t-accent)', 'var(--t-accent-ink)', 'var(--t-text-3)', 'var(--t-line)']
 
 export function DashboardView({ state, history }: { state: State; history: History }) {
   const [series, setSeries] = useState<Series>('bandwidth')
@@ -114,7 +109,9 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         <section className="panel">
           <div className="panel-head">
             <span className="panel-title">Model storage</span>
-            <span className="panel-meta">{bytes(disk)} · {state.models.length} files</span>
+            <span className="panel-meta">
+              {bytes(disk)} · {state.models.length} files
+            </span>
           </div>
           <div className="panel-body">
             {disk > 0 ? (
@@ -163,9 +160,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
           <MeterRow
             label="Downloads"
             value={
-              state.settings.parallel_downloads
-                ? (downloading.length / state.settings.parallel_downloads) * 100
-                : 0
+              state.settings.parallel_downloads ? (downloading.length / state.settings.parallel_downloads) * 100 : 0
             }
             detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
             tone="info"

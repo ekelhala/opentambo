@@ -31,16 +31,10 @@ export function AlertDialogFooter({ className, ...props }: React.ComponentProps<
   return <div className={cn('dialog-foot', className)} {...props} />
 }
 
-export function AlertDialogAction({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+export function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
   return <AlertDialogPrimitive.Action className={cn('btn btn-danger', className)} {...props} />
 }
 
-export function AlertDialogCancel({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+export function AlertDialogCancel({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
   return <AlertDialogPrimitive.Cancel className={cn('btn btn-secondary', className)} {...props} />
 }

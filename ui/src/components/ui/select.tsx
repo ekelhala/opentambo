@@ -6,11 +6,7 @@ import { cn } from 'cn'
 export const Select = SelectPrimitive.Root
 export const SelectValue = SelectPrimitive.Value
 
-export function SelectTrigger({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
+export function SelectTrigger({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Trigger>) {
   return (
     <SelectPrimitive.Trigger className={cn('select-trigger', className)} {...props}>
       {children}
@@ -21,11 +17,7 @@ export function SelectTrigger({
   )
 }
 
-export function SelectContent({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+export function SelectContent({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content className={cn('select-content', className)} position="popper" {...props}>
@@ -35,11 +27,7 @@ export function SelectContent({
   )
 }
 
-export function SelectItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+export function SelectItem({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) {
   return (
     <SelectPrimitive.Item className={cn('select-item', className)} {...props}>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

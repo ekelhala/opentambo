@@ -30,14 +30,14 @@ paths:
       operationId: getState
       summary: Full management snapshot (settings, models, catalog, jobs, runs, profiles)
       responses:
-        "200":
+        '200':
           description: Current state snapshot
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/State"
+                $ref: '#/components/schemas/State'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/downloads:
     post:
       operationId: addDownloads
@@ -51,48 +51,48 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DownloadRequest"
+              $ref: '#/components/schemas/DownloadRequest'
       responses:
-        "202":
+        '202':
           description: Jobs accepted and queued
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Job"
+                  $ref: '#/components/schemas/Job'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/downloads/{id}/cancel:
     parameters:
-      - $ref: "#/components/parameters/JobID"
+      - $ref: '#/components/parameters/JobID'
     post:
       operationId: cancelDownload
       summary: Cancel (pause) a queued or running download
       responses:
-        "202":
+        '202':
           description: Cancel requested
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Accepted"
+                $ref: '#/components/schemas/Accepted'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/downloads/{id}/resume:
     parameters:
-      - $ref: "#/components/parameters/JobID"
+      - $ref: '#/components/parameters/JobID'
     post:
       operationId: resumeDownload
       summary: Resume an interrupted, failed or cancelled download
       responses:
-        "202":
+        '202':
           description: Resume requested
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Accepted"
+                $ref: '#/components/schemas/Accepted'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/repository:
     get:
       operationId: browseRepository
@@ -111,14 +111,14 @@ paths:
             type: string
           description: Branch, tag or commit without slashes (defaults to main)
       responses:
-        "200":
+        '200':
           description: Quantization groups with their files
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RepositoryListing"
+                $ref: '#/components/schemas/RepositoryListing'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/models:
     delete:
       operationId: deleteModel
@@ -131,14 +131,14 @@ paths:
             type: string
           description: Model path relative to the models directory (must end in .gguf)
       responses:
-        "200":
+        '200':
           description: File deleted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Deleted"
+                $ref: '#/components/schemas/Deleted'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/runs:
     post:
       operationId: launchRun
@@ -148,49 +148,49 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Launch"
+              $ref: '#/components/schemas/Launch'
       responses:
-        "201":
+        '201':
           description: Process started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Run"
+                $ref: '#/components/schemas/Run'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/runs/{id}/stop:
     parameters:
-      - $ref: "#/components/parameters/RunID"
+      - $ref: '#/components/parameters/RunID'
     post:
       operationId: stopRun
       summary: Stop a managed llama-server process
       responses:
-        "202":
+        '202':
           description: Stop requested
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Accepted"
+                $ref: '#/components/schemas/Accepted'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/runs/{id}/logs:
     parameters:
-      - $ref: "#/components/parameters/RunID"
+      - $ref: '#/components/parameters/RunID'
     get:
       operationId: getRunLogs
       summary: Buffered stdout/stderr of a managed process (last 128 KiB)
       responses:
-        "200":
+        '200':
           description: Log text
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Logs"
+                $ref: '#/components/schemas/Logs'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/runs/{id}/health:
     parameters:
-      - $ref: "#/components/parameters/RunID"
+      - $ref: '#/components/parameters/RunID'
     get:
       operationId: getRunHealth
       summary: Health of a managed process, proxied from its child /health endpoint
@@ -199,14 +199,14 @@ paths:
         not be reached, status is unreachable with detail. Otherwise the
         child's HTTP status and JSON response body are passed through.
       responses:
-        "200":
+        '200':
           description: Health view (see description for the three shapes)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunHealth"
+                $ref: '#/components/schemas/RunHealth'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/cache:
     get:
       operationId: getCache
@@ -215,14 +215,14 @@ paths:
         Sanitized metadata only: snapshot bytes and prompt token IDs never
         leave the server.
       responses:
-        "200":
+        '200':
           description: Namespace summaries plus current defaults
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CacheReport"
+                $ref: '#/components/schemas/CacheReport'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /api/cache/{id}:
     delete:
       operationId: deleteCacheEntry
@@ -234,59 +234,59 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        '200':
           description: Snapshot deleted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Deleted"
-        "404":
+                $ref: '#/components/schemas/Deleted'
+        '404':
           description: No such cache entry
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
-        "409":
+                $ref: '#/components/schemas/Error'
+        '409':
           description: Entry is in use and cannot be deleted right now
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
+                $ref: '#/components/schemas/Error'
   /api/cache/prune:
     post:
       operationId: pruneCache
       summary: Remove expired and over-budget prompt-cache snapshots
       responses:
-        "200":
+        '200':
           description: Number of snapshots removed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PruneResult"
+                $ref: '#/components/schemas/PruneResult'
         default:
-          $ref: "#/components/responses/Error"
+          $ref: '#/components/responses/Error'
   /health:
     get:
       operationId: health
       summary: Service health (compatible with an existing Pangolin Manager health target)
       responses:
-        "200":
+        '200':
           description: Service is up
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                $ref: '#/components/schemas/HealthStatus'
   /healthz:
     get:
       operationId: healthz
       summary: Service health
       responses:
-        "200":
+        '200':
           description: Service is up
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                $ref: '#/components/schemas/HealthStatus'
 components:
   parameters:
     JobID:
@@ -307,7 +307,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: '#/components/schemas/Error'
   schemas:
     Error:
       type: object
@@ -368,7 +368,7 @@ components:
         files:
           type: array
           items:
-            $ref: "#/components/schemas/Model"
+            $ref: '#/components/schemas/Model'
         size:
           type: integer
           format: int64
@@ -393,7 +393,7 @@ components:
         quantizations:
           type: array
           items:
-            $ref: "#/components/schemas/Quantization"
+            $ref: '#/components/schemas/Quantization'
         size:
           type: integer
           format: int64
@@ -420,7 +420,7 @@ components:
         files:
           type: array
           items:
-            $ref: "#/components/schemas/RepositoryFile"
+            $ref: '#/components/schemas/RepositoryFile'
         size:
           type: integer
           format: int64
@@ -439,7 +439,7 @@ components:
         quantizations:
           type: array
           items:
-            $ref: "#/components/schemas/RepositoryQuantization"
+            $ref: '#/components/schemas/RepositoryQuantization'
     JobStatus:
       type: string
       description: >-
@@ -458,7 +458,7 @@ components:
           type: string
           description: Destination path relative to the models directory
         status:
-          $ref: "#/components/schemas/JobStatus"
+          $ref: '#/components/schemas/JobStatus'
         bytes:
           type: integer
           format: int64
@@ -515,7 +515,7 @@ components:
           type: integer
     PromptCacheDefaults:
       allOf:
-        - $ref: "#/components/schemas/CacheDefaults"
+        - $ref: '#/components/schemas/CacheDefaults'
         - type: object
           required: [enabled]
           properties:
@@ -597,7 +597,7 @@ components:
         requested:
           type: boolean
         status:
-          $ref: "#/components/schemas/CacheStatus"
+          $ref: '#/components/schemas/CacheStatus'
         reason:
           type: string
         namespace:
@@ -611,7 +611,7 @@ components:
           type: integer
           format: int64
         stats:
-          $ref: "#/components/schemas/CacheStats"
+          $ref: '#/components/schemas/CacheStats'
     Launch:
       type: object
       description: Configuration for one managed llama-server process
@@ -641,7 +641,7 @@ components:
         prompt_cache:
           nullable: true
           x-go-type-skip-optional-pointer: false
-          $ref: "#/components/schemas/PromptCache"
+          $ref: '#/components/schemas/PromptCache'
     RunStatus:
       type: string
       enum: [running, stopping, stopped, failed]
@@ -652,7 +652,7 @@ components:
         id:
           type: string
         launch:
-          $ref: "#/components/schemas/Launch"
+          $ref: '#/components/schemas/Launch'
         command:
           type: array
           items:
@@ -660,7 +660,7 @@ components:
         pid:
           type: integer
         status:
-          $ref: "#/components/schemas/RunStatus"
+          $ref: '#/components/schemas/RunStatus'
         started:
           type: string
           format: date-time
@@ -676,7 +676,7 @@ components:
           x-go-type-skip-optional-pointer: false
           description: Prompt-cache summary; absent unless the run was launched with the cache configured
           allOf:
-            - $ref: "#/components/schemas/CacheSummary"
+            - $ref: '#/components/schemas/CacheSummary'
     RunHealthStatus:
       type: string
       description: Managed run status, or unreachable when the child /health probe failed
@@ -689,7 +689,7 @@ components:
         {http_status, response} passing through the child's own health reply.
       properties:
         status:
-          $ref: "#/components/schemas/RunHealthStatus"
+          $ref: '#/components/schemas/RunHealthStatus'
         detail:
           type: string
         http_status:
@@ -731,9 +731,9 @@ components:
         model:
           type: string
         run_status:
-          $ref: "#/components/schemas/RunStatus"
+          $ref: '#/components/schemas/RunStatus'
         cache:
-          $ref: "#/components/schemas/CacheSummary"
+          $ref: '#/components/schemas/CacheSummary'
     CacheNamespace:
       type: object
       required: [namespace, entries, bytes_used, max_bytes, runs]
@@ -743,7 +743,7 @@ components:
         entries:
           type: array
           items:
-            $ref: "#/components/schemas/CacheEntry"
+            $ref: '#/components/schemas/CacheEntry'
         bytes_used:
           type: integer
           format: int64
@@ -753,7 +753,7 @@ components:
         runs:
           type: array
           items:
-            $ref: "#/components/schemas/CacheNamespaceRun"
+            $ref: '#/components/schemas/CacheNamespaceRun'
     CacheReport:
       type: object
       required: [namespaces, defaults]
@@ -761,9 +761,9 @@ components:
         namespaces:
           type: array
           items:
-            $ref: "#/components/schemas/CacheNamespace"
+            $ref: '#/components/schemas/CacheNamespace'
         defaults:
-          $ref: "#/components/schemas/CacheDefaults"
+          $ref: '#/components/schemas/CacheDefaults'
     PruneResult:
       type: object
       required: [removed]
@@ -783,34 +783,34 @@ components:
         parallel_downloads:
           type: integer
         prompt_cache_defaults:
-          $ref: "#/components/schemas/PromptCacheDefaults"
+          $ref: '#/components/schemas/PromptCacheDefaults'
     State:
       type: object
       required: [settings, models, catalog, jobs, runs, profiles]
       properties:
         settings:
-          $ref: "#/components/schemas/StateSettings"
+          $ref: '#/components/schemas/StateSettings'
         models:
           type: array
           items:
-            $ref: "#/components/schemas/Model"
+            $ref: '#/components/schemas/Model'
         catalog:
           type: array
           items:
-            $ref: "#/components/schemas/CatalogModel"
+            $ref: '#/components/schemas/CatalogModel'
         jobs:
           type: array
           items:
-            $ref: "#/components/schemas/Job"
+            $ref: '#/components/schemas/Job'
         runs:
           type: array
           items:
-            $ref: "#/components/schemas/Run"
+            $ref: '#/components/schemas/Run'
         profiles:
           type: object
           description: Last-used launch configuration per model path
           additionalProperties:
-            $ref: "#/components/schemas/Launch"
+            $ref: '#/components/schemas/Launch'
     DownloadRequest:
       type: object
       description: >-

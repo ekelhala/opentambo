@@ -6,10 +6,10 @@ opentambo owns.
 
 ## Ownership rule
 
-| Surface | Owner | Contract |
-| --- | --- | --- |
-| `/api/*`, `/health`, `/healthz` | opentambo | [`api/openapi.yaml`](../api/openapi.yaml) — the authoritative schema |
-| `/v1/*` (OpenAI-compatible proxy) | OpenAI's external compatibility contract | deliberately **not** in `api/openapi.yaml` |
+| Surface                           | Owner                                    | Contract                                                             |
+| --------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| `/api/*`, `/health`, `/healthz`   | opentambo                                | [`api/openapi.yaml`](../api/openapi.yaml) — the authoritative schema |
+| `/v1/*` (OpenAI-compatible proxy) | OpenAI's external compatibility contract | deliberately **not** in `api/openapi.yaml`                           |
 
 The `/v1/*` proxy must forward arbitrary request fields, upstream error
 shapes, streaming/SSE responses and cancellation semantics exactly as the
@@ -27,10 +27,10 @@ handlers emit.
 `api/openapi.yaml` is the single source of truth. Both sides of the wire get
 types generated from it:
 
-| Output | Generator (pinned) | Command |
-| --- | --- | --- |
-| `internal/desk/api/gen.go` | [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) v2.8.2, config `api/oapi-codegen.yaml` | `make generate-api` |
-| `ui/src/lib/api.gen.ts` | [openapi-typescript](https://github.com/openapi-typescript/openapi-typescript) 7.13.0 (isolated in `tools/tsgen/`, drives TypeScript 5's compiler API) | `make generate-api` |
+| Output                     | Generator (pinned)                                                                                                                                     | Command             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `internal/desk/api/gen.go` | [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) v2.8.2, config `api/oapi-codegen.yaml`                                                    | `make generate-api` |
+| `ui/src/lib/api.gen.ts`    | [openapi-typescript](https://github.com/openapi-typescript/openapi-typescript) 7.13.0 (isolated in `tools/tsgen/`, drives TypeScript 5's compiler API) | `make generate-api` |
 
 Regenerate after any spec change and commit the output — the generators are
 byte-stable, so a diff after regeneration means the spec changed. Never edit
@@ -38,7 +38,7 @@ generated files and never handwrite transport structs or UI interfaces that
 duplicate them; extend the spec instead. The backend handler types
 (`Job`, `Run`, `Launch`, `PromptCache`, catalog/repository/cache records)
 are aliases or embeds of the generated records, so what the handlers compile
-against *is* the contract.
+against _is_ the contract.
 
 The toolchain stays a dev/CI dependency only: the shipped single binary
 embeds nothing from the generators.
@@ -50,7 +50,7 @@ embeds nothing from the generators.
   rejections (403/415).
 - Enums are closed sets with generated constants on both sides:
   `JobStatus`, `RunStatus`, `CacheStatus` (`checking | ready | unsupported |
-  error` — the drift fixed in #13 is now a contract, see below) and the
+error` — the drift fixed in #13 is now a contract, see below) and the
   three-shape `RunHealth` union.
 - Optional collections (`Launch.args`, `Launch.env`) are always present on
   the wire; absent client values normalize to `[]`/`{}` on every round trip.

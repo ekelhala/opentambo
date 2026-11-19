@@ -4,7 +4,7 @@
 # Deliberately narrow: correctness-oriented analyzers plus the complexity
 # gates from the testing policy. Stylistic rule sets are not enabled —
 # gofmt owns formatting.
-version: "2"
+version: '2'
 linters:
   # default: standard = errcheck, govet, ineffassign, staticcheck, unused
   default: standard
@@ -42,7 +42,7 @@ linters:
       # family (ST1000 package comments and friends) here.
       checks:
         - default
-        - "-ST1005"
+        - '-ST1005'
   exclusions:
     generated: lax
     rules:

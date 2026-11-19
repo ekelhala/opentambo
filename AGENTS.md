@@ -64,7 +64,7 @@ Full workflow and rationale: [docs/api-contracts.md](docs/api-contracts.md).
 - Request bodies on owned routes are decoded with `DisallowUnknownFields` and
   a 64 KiB limit; keep that when adding endpoints.
 - The shipped binary must stay CGO-free and generator-free: `CGO_ENABLED=0
-  go build -tags ui`.
+go build -tags ui`.
 
 ## CI
 

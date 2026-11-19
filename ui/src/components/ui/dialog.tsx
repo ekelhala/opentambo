@@ -6,20 +6,13 @@ import { cn } from 'cn'
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 
-export function DialogContent({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+export function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="dialog-overlay" />
       <DialogPrimitive.Content className={cn('dialog-content', className)} {...props}>
         {children}
-        <DialogPrimitive.Close
-          className="icon-btn absolute top-4 right-4"
-          aria-label="Close"
-        >
+        <DialogPrimitive.Close className="icon-btn absolute top-4 right-4" aria-label="Close">
           <CloseIcon />
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>

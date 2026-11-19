@@ -15,9 +15,7 @@ export function GatewayView({ state }: { state: State }) {
       <div className="panel">
         <div className="panel-head">
           <span className="panel-title">Routes</span>
-          <span className="panel-meta">
-            {serving.length ? `${serving.length} served` : 'nothing serving'}
-          </span>
+          <span className="panel-meta">{serving.length ? `${serving.length} served` : 'nothing serving'}</span>
         </div>
         <div className="panel-body grid gap-3.5">
           <div className="route">
@@ -33,8 +31,8 @@ export function GatewayView({ state }: { state: State }) {
               <div key={run.id} className="grid gap-1.5 border-t border-[var(--t-line-soft)] pt-3.5">
                 <div className="route">
                   <span className="method">POST</span> /v1/chat/completions <span className="arrow">→</span>{' '}
-                  <span className="text-[var(--t-text)]">"{run.launch.name}"</span>{' '}
-                  <span className="arrow">→</span> 127.0.0.1:{run.launch.port}
+                  <span className="text-[var(--t-text)]">"{run.launch.name}"</span> <span className="arrow">→</span>{' '}
+                  127.0.0.1:{run.launch.port}
                 </div>
                 <div className="route pl-1">
                   <span className="method">POST</span> /v1/completions · /v1/embeddings · /v1/responses{' '}
@@ -44,8 +42,8 @@ export function GatewayView({ state }: { state: State }) {
             ))
           ) : (
             <p className="border-t border-[var(--t-line-soft)] pt-3.5 text-[13px] text-[var(--t-text-2)]">
-              No managed process is serving. Launch a server and its API model name becomes a
-              stable route here and at your LiteLLM gateway.
+              No managed process is serving. Launch a server and its API model name becomes a stable route here and at
+              your LiteLLM gateway.
             </p>
           )}
         </div>
@@ -54,8 +52,8 @@ export function GatewayView({ state }: { state: State }) {
       <div className="callout callout-info mt-5" style={{ maxWidth: '46rem' }}>
         <InfoIcon />
         <p>
-          SSE streams and error statuses pass through untouched. A caller disconnecting cancels
-          the upstream request. Auth headers are stripped before forwarding.
+          SSE streams and error statuses pass through untouched. A caller disconnecting cancels the upstream request.
+          Auth headers are stripped before forwarding.
         </p>
       </div>
     </div>

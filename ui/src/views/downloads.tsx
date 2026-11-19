@@ -83,12 +83,9 @@ function DownloadForm({
     try {
       const query = new URLSearchParams({ repo: trimmed })
       if (revision.trim()) query.set('revision', revision.trim())
-      const result = await api<{ quantizations: RepositoryQuantization[] }>(
-        `repository?${query.toString()}`
-      )
+      const result = await api<{ quantizations: RepositoryQuantization[] }>(`repository?${query.toString()}`)
       setQuants(result.quantizations)
-      if (!result.quantizations.length)
-        toast.message('No GGUF quantizations found in that repository')
+      if (!result.quantizations.length) toast.message('No GGUF quantizations found in that repository')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
@@ -113,7 +110,10 @@ function DownloadForm({
             event.preventDefault()
             onSubmit({
               repo: repo.trim(),
-              files: files.split('\n').map((s) => s.trim()).filter(Boolean),
+              files: files
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean),
               revision: revision.trim(),
             })
             setFiles('')
@@ -148,12 +148,7 @@ function DownloadForm({
                 spellCheck={false}
               />
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={lookUp}
-              disabled={lookupBusy || !repoLooksValid}
-            >
+            <Button type="button" variant="secondary" onClick={lookUp} disabled={lookupBusy || !repoLooksValid}>
               {lookupBusy ? <SpinnerIcon /> : <SearchIcon />} Look up quantizations
             </Button>
           </div>
@@ -193,9 +188,9 @@ function DownloadForm({
               spellCheck={false}
             />
             <p className="f-hint">
-              Pick a quantization above to fill this automatically, or type exact filenames.
-              Transfers land as <span className="mono">.part</span> files and are verified before
-              the final name is claimed. Existing files are never replaced.
+              Pick a quantization above to fill this automatically, or type exact filenames. Transfers land as{' '}
+              <span className="mono">.part</span> files and are verified before the final name is claimed. Existing
+              files are never replaced.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-1">
