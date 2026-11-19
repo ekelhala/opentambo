@@ -1,0 +1,4 @@
+# Generated wire types are owned by make generate-api (issue #14); their
+# formatting must stay exactly as emitted by openapi-typescript.
+src/lib/api.gen.ts
+dist/

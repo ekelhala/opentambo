@@ -1,0 +1,17 @@
+# Generated or vendor-owned files. Formatting generated types would fight
+# `make generate-api` drift checks; node_modules and build output are not
+# ours to format.
+node_modules/
+tools/tsgen/
+internal/desk/api/gen.go
+ui/src/lib/api.gen.ts
+internal/desk/web/
+bin/
+dist/
+data/
+models/
+mockup/
+bun.lock
+ui/package-lock.json
+# Historical design scratch space, not maintained copy (issue #18 scope note).
+.impeccable/
