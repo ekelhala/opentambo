@@ -31,7 +31,7 @@ const identityHashTag = "opentambo-prompt-cache-identity-v3\n"
 // kind[len:value] pins each field's byte span, making the concatenation of
 // any sequence of fields injective.
 func hashIdentityField(h io.Writer, kind, value string) {
-	fmt.Fprintf(h, "%s[%d]:", kind, len(value))
+	_, _ = fmt.Fprintf(h, "%s[%d]:", kind, len(value))
 	_, _ = io.WriteString(h, value)
 	_, _ = io.WriteString(h, "\n")
 }
@@ -290,7 +290,8 @@ func (c *digestCache) load(data string) error {
 	}
 	var entries map[string]*digestRecord
 	if err := json.Unmarshal(contents, &entries); err != nil {
-		return nil // a corrupt digest cache only costs re-hashing
+		//nolint:nilerr // a corrupt digest cache only costs re-hashing
+		return nil
 	}
 	if entries != nil {
 		c.entries = entries
