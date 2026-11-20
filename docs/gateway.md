@@ -1,8 +1,9 @@
 # LiteLLM gateway
 
-opentambo exposes one OpenAI-compatible entry point for all managed
-processes, so LiteLLM backend URLs stay fixed when models, ports, or child
-servers change:
+OpenTambo is a lightweight llama.cpp process manager and persistent KV-cache
+proxy with a web control panel. As the gateway part of that, it exposes one
+OpenAI-compatible entry point for all managed processes, so LiteLLM backend
+URLs stay fixed when models, ports, or child servers change:
 
 ```text
 Client → LiteLLM (keys and policies) → opentambo /v1 → selected llama-server
@@ -17,7 +18,7 @@ child's port.
 
 ## Routes
 
-On opentambo's normal listener (default `127.0.0.1:8090`):
+On OpenTambo's normal listener (default `127.0.0.1:8090`):
 
 - `GET /v1/models` — model names for currently running managed processes.
 - `POST /v1/chat/completions`, `/v1/completions`, `/v1/embeddings`,
@@ -50,7 +51,7 @@ model_list:
       api_key: local-opentambo
 ```
 
-The key is a dummy provider key; opentambo does not authenticate. Retain
+The key is a dummy provider key; OpenTambo does not authenticate. Retain
 LiteLLM's existing database, client keys, and access controls. Model names
-and access policies still need registration in LiteLLM; opentambo does not
+and access policies still need registration in LiteLLM; OpenTambo does not
 synchronize its model list into LiteLLM's database.

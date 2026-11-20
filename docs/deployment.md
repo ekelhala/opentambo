@@ -1,7 +1,10 @@
 # Deployment
 
-opentambo runs as the user who owns the models, without sudo. The examples
-below use an inference host where the models live on a mounted disk.
+OpenTambo — a lightweight llama.cpp process manager and persistent KV-cache
+proxy with a web control panel — runs as the user who owns the models, without
+sudo. The examples below use an inference host where the models live on a
+mounted disk. (A standard automated system-wide installation with a dedicated
+service account is planned, see #16.)
 
 ## systemd
 
@@ -16,8 +19,8 @@ sudo systemctl enable --now opentambo
 ```
 
 The unit stops cleanly (`KillMode=control-group`): managed `llama-server`
-children are in opentambo's own process groups and go down with it. Children
-do not restart automatically when opentambo restarts; start the models you
+children are in OpenTambo's own process groups and go down with it. Children
+do not restart automatically when OpenTambo restarts; start the models you
 need from the UI.
 
 A server the user started themselves on a port is not adopted or controlled —
