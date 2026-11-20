@@ -46,21 +46,31 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	profile := fs.Arg(0)
-	if profile == "" {
-		profile = "coverage.out"
+	profiles := fs.Args()
+	if len(profiles) == 0 {
+		profiles = []string{"coverage.out"}
 	}
-	return run(*base, profile, *threshold, stdout)
+	return run(*base, profiles, *threshold, stdout)
 }
 
-func run(base, profile string, threshold float64, stdout io.Writer) error {
+// run evaluates the gate against one or more coverage profiles. A changed
+// line counts as covered when any profile shows a block executing over it:
+// that is how the unit profile (coverage.out) and the instrumented
+// real-binary integration profile (coverage.integration.out) combine —
+// paths only a real process reaches, like main(), are proven honestly,
+// not exempted.
+func run(base string, profiles []string, threshold float64, stdout io.Writer) error {
 	changed, err := ChangedLines(base)
 	if err != nil {
 		return err
 	}
-	blocks, err := ParseProfileFile(profile)
-	if err != nil {
-		return err
+	var blocks []Block
+	for _, profile := range profiles {
+		parsed, err := ParseProfileFile(profile)
+		if err != nil {
+			return err
+		}
+		blocks = append(blocks, parsed...)
 	}
 	report := Evaluate(changed, blocks)
 	// Report writes are best-effort: a closed stdout must not turn a

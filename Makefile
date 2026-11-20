@@ -84,8 +84,12 @@ coverage-check:
 	scripts/go-coverage.sh --check-only
 
 ## changed-coverage: ≥90% coverage of changed executable Go lines vs a base ref
+## The instrumented integration profile (coverage.integration.out) is merged
+## when present: paths only a real process reaches, like main(), must be
+## proven by executing them, not exempted from the denominator.
 changed-coverage:
-	go run ./tools/covdiff -base $(or $(BASE_REF),origin/main) coverage.out
+	go run ./tools/covdiff -base $(or $(BASE_REF),origin/main) coverage.out \
+		$(if $(wildcard coverage.integration.out),coverage.integration.out,)
 
 ## check: everything CI requires, in the CI order
 check: fmt-check lint test test-ui coverage changed-coverage

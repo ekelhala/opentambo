@@ -102,6 +102,72 @@ func TestRunCLIRejectsUnknownFlag(t *testing.T) {
 	}
 }
 
+// TestRunCLIDefaultProfileOutsideRepo covers the default profile path and
+// the git failure: with no profile argument and no repository, the changed
+// line lookup must surface an error rather than panic.
+func TestRunCLIDefaultProfileOutsideRepo(t *testing.T) {
+	t.Chdir(t.TempDir()) // not a git repository
+	var stdout, stderr bytes.Buffer
+	if err := runCLI([]string{}, &stdout, &stderr); err == nil {
+		t.Fatal("running outside a repository must fail")
+	}
+}
+
+func TestEligibleExclusions(t *testing.T) {
+	cases := map[string]bool{
+		"internal/desk/cache.go":         true,
+		"cmd/opentambo/main.go":          true,
+		"internal/desk/cache_test.go":    false,
+		"README.md":                      false,
+		"test/integration/cache_test.go": false,
+		"test/integration/harness.go":    false,
+		"internal/desk/api/gen.go":       false,
+		"tools/tsgen/generate.go":        false,
+	}
+	for path, want := range cases {
+		if got := Eligible(path); got != want {
+			t.Errorf("Eligible(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestParseProfileFileSkipsMalformedLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "profile.out")
+	body := "mode: atomic\n" +
+		"\n" + // blank
+		"short line\n" + // wrong field count
+		"nocolon 1 1\n" + // missing location separator
+		"mod/a.go:1-2 1 1\n" + // missing range comma
+		"mod/a.go:x.y,z.w 1 1\n" + // non-numeric start
+		"mod/a.go:1.1,q.2 1 1\n" // non-numeric end
+	body += "mod/a.go:3.1,4.2 1 notacount\n"      // non-numeric count
+	body += modulePrefix + "a/b.go:5.1,6.2 2 1\n" // the one valid entry
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	blocks, err := ParseProfileFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 1 || blocks[0].File != "a/b.go" || blocks[0].Count != 1 {
+		t.Fatalf("only the valid entry may survive: %+v", blocks)
+	}
+}
+
+func TestRecordAddedLinesRejectsBadNumbers(t *testing.T) {
+	lines := FileLines{}
+	recordAddedLines(lines, "a.go", []string{"", "notanumber", ""})
+	recordAddedLines(lines, "a.go", []string{"", "5", "notanumber"})
+	recordAddedLines(lines, "a.go", []string{"", "7", "0"}) // pure deletion
+	if len(lines) != 0 {
+		t.Fatalf("invalid or empty hunks must record nothing: %v", lines)
+	}
+	recordAddedLines(lines, "a.go", []string{"", "4", "2"})
+	if !lines["a.go"][4] || !lines["a.go"][5] || lines["a.go"][6] {
+		t.Fatalf("hunk 4,2 must record exactly lines 4-5: %v", lines["a.go"])
+	}
+}
+
 func TestParseDiffHunks(t *testing.T) {
 	diff := []byte(`diff --git a/internal/desk/app.go b/internal/desk/app.go
 --- a/internal/desk/app.go
