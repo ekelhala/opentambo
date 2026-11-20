@@ -156,6 +156,56 @@ func TestRunHistorySurvivesDemotion(t *testing.T) {
 	}
 }
 
+func TestReplaceStateAtomicSwap(t *testing.T) {
+	_, db := openTestStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	jobs := []Download{{ID: "old", URL: "u", File: "o.gguf", Status: "completed", Total: -1, Created: now}}
+	profiles := []Profile{{Name: "old.gguf", Model: "old.gguf", Alias: "old", Port: 8091}}
+	if err := ReplaceState(db, jobs, profiles); err != nil {
+		t.Fatal(err)
+	}
+	swapped := []Download{{ID: "new", URL: "u2", File: "n.gguf", Status: "queued", Total: -1, Created: now}}
+	if err := ReplaceState(db, swapped, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Downloads(db); err != nil || len(got) != 1 || got[0].ID != "new" {
+		t.Fatalf("downloads after swap = %+v (%v)", got, err)
+	}
+	if got, err := Profiles(db); err != nil || len(got) != 0 {
+		t.Fatalf("profiles after swap = %+v (%v)", got, err)
+	}
+	// Run history is deliberately untouched by state swaps.
+	if err := SaveRun(db, RunRecord{ID: "r", Status: "stopped", Started: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReplaceState(db, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if hist, err := RunHistory(db, 5); err != nil || len(hist) != 1 {
+		t.Fatalf("run history lost during state swap: %+v (%v)", hist, err)
+	}
+}
+
+func TestImportStateRecordsMarkerAtomically(t *testing.T) {
+	_, db := openTestStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	jobs := []Download{{ID: "j1", URL: "u", File: "a.gguf", Status: "completed", Total: 10, Created: now}}
+	profiles := []Profile{{Name: "a.gguf", Model: "a.gguf", Alias: "a", Port: 8090}}
+	if err := ImportState(db, "3 jobs", jobs, profiles); err != nil {
+		t.Fatal(err)
+	}
+	v, ok, err := Meta(db, "import.state_json")
+	if err != nil || !ok || v != "3 jobs" {
+		t.Fatalf("import marker = (%q,%v,%v)", v, ok, err)
+	}
+	if got, _ := Downloads(db); len(got) != 1 || got[0].Status != "completed" {
+		t.Fatalf("imported downloads = %+v", got)
+	}
+	if got, _ := Profiles(db); len(got) != 1 || got[0].Alias != "a" {
+		t.Fatalf("imported profiles = %+v", got)
+	}
+}
+
 func TestMetaMarkers(t *testing.T) {
 	_, db := openTestStore(t)
 	if _, ok, err := Meta(db, "import.state_json"); err != nil || ok {

@@ -92,18 +92,81 @@ func ReplaceDownloads(db *sql.DB, jobs []Download) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.Exec(`DELETE FROM downloads`); err != nil {
+	if err = replaceDownloadsTx(tx, jobs); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func replaceDownloadsTx(tx *sql.Tx, jobs []Download) error {
+	if _, err := tx.Exec(`DELETE FROM downloads`); err != nil {
 		return err
 	}
 	for _, j := range jobs {
-		if _, err = tx.Exec(`INSERT INTO downloads
+		if _, err := tx.Exec(`INSERT INTO downloads
 			(id, url, file, status, bytes, total, bytes_per_second, etag, error, created)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			j.ID, j.URL, j.File, j.Status, j.Bytes, j.Total, j.BytesPerSecond, j.ETag, j.Error, encodeTime(j.Created)); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// ImportState atomically replaces the downloads and profiles tables and
+// records the import completion marker in the same transaction, so an
+// interrupted import retries from scratch without duplicating rows and a
+// completed import is never applied twice.
+func ImportState(db *sql.DB, markerValue string, jobs []Download, profiles []Profile) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = replaceDownloadsTx(tx, jobs); err != nil {
+		return err
+	}
+	if err = replaceProfilesTx(tx, profiles); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO meta (key, value) VALUES ('import.state_json', ?)
+		ON CONFLICT (key) DO UPDATE SET value = excluded.value`, markerValue); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// ReplaceState rewrites downloads and profiles from the manager's
+// authoritative in-memory snapshot in one transaction; the run history is
+// deliberately untouched.
+func ReplaceState(db *sql.DB, jobs []Download, profiles []Profile) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err = replaceDownloadsTx(tx, jobs); err != nil {
+		return err
+	}
+	if err = replaceProfilesTx(tx, profiles); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func replaceProfilesTx(tx *sql.Tx, profiles []Profile) error {
+	if _, err := tx.Exec(`DELETE FROM profiles`); err != nil {
+		return err
+	}
+	for _, p := range profiles {
+		if _, err := tx.Exec(`INSERT INTO profiles
+			(name, model, alias, port, context, gpu_layers, args_json, env_json, prompt_cache_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.Name, p.Model, p.Alias, p.Port, p.Context, p.GPULayers, p.ArgsJSON, p.EnvJSON, p.PromptCacheJSON); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Downloads returns all persisted jobs ordered by creation.
