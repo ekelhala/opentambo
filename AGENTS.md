@@ -14,6 +14,7 @@ at release.
 
 ```sh
 make test          # go vet + go test -race ./...
+make check         # every CI gate, in CI order (fmt, lint, tests, coverage)
 make generate-api  # regenerate wire types from api/openapi.yaml (Go + TS)
 make build         # UI (bun) then binary with -tags ui into bin/opentambo
 make dev           # backend on 127.0.0.1:8090 + Vite dev server
@@ -22,6 +23,24 @@ cd ui && bun run test && bun run lint && bunx tsc -b
 
 `bun.lock` is canonical for the UI; `ui/node_modules` and
 `internal/desk/web` are git-ignored. Go 1.27+, bun, GNU make.
+
+## Quality gates (important)
+
+- Coverage floors in `test/coverage-baseline.txt` are a **ratchet**: raising
+  them is normal; lowering one, deleting a rule, or excluding a package
+  requires a policy note in the PR description. A missing coverage artifact
+  fails the gate — never paper over it.
+- New or changed functions must stay under cyclomatic complexity 15 and
+  cognitive complexity 20 (`cyclop`/`gocognit` in `.golangci.yml`). Legacy
+  violations sit in an explicit text-pinned baseline; fix a violation by
+  removing its baseline entry, never by adding to it.
+- Do not weaken thresholds, broaden lint suppressions, or replace required
+  real-backend integrations with mocks to make a gate pass.
+- `make test-integration` runs the real OpenTambo binary (built with
+  `-cover`) against a pinned real llama.cpp server on CPU. Zero executed
+  integration tests fail the suite; there is no skip path.
+- Full gate list, coverage denominators/exclusions and the integration
+  scenario inventory: [docs/testing.md](docs/testing.md).
 
 ## API contracts (important)
 
