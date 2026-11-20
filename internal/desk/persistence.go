@@ -32,20 +32,20 @@ func (a *App) openDurable() error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	if err = store.Migrate(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("database schema: %w", err)
 	}
 	a.db = db
 	if err = a.importLegacyState(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return err
 	}
 	if err = a.loadDurable(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return err
 	}
 	if err = store.DemoteLiveRuns(db, time.Now(), "the manager restarted; the recorded process is no longer supervised"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("demote stale run records: %w", err)
 	}
 	return nil

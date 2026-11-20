@@ -130,20 +130,8 @@ func openCacheStore(db *sql.DB, dir, namespace string, policy *cachePolicy) (*ca
 		return nil, err
 	}
 	s := &cacheStore{db: db, dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, invalid: map[string]bool{}, temps: map[string]*tempReservation{}, pins: map[string]int{}, now: time.Now}
-	persisted, hasPolicy, err := store.Namespace(db, resolved)
-	if err != nil {
+	if err = s.restorePolicy(); err != nil {
 		return nil, err
-	}
-	if !hasPolicy {
-		if err = s.importLegacy(); err != nil {
-			return nil, err
-		}
-		if persisted, hasPolicy, err = store.Namespace(db, resolved); err != nil {
-			return nil, err
-		}
-	}
-	if hasPolicy && persisted.HasPolicy {
-		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
 	}
 	if policy != nil {
 		s.maxBytes, s.maxEntryBytes, s.ttl = policy.MaxBytes, policy.MaxEntryBytes, secondsDuration(policy.TTLSeconds)
@@ -168,6 +156,28 @@ func openCacheStore(db *sql.DB, dir, namespace string, policy *cachePolicy) (*ca
 	return s, nil
 }
 
+// restorePolicy adopts the database-persisted limits when present,
+// importing a pre-SQLite directory first when the namespace row does not
+// exist yet.
+func (s *cacheStore) restorePolicy() error {
+	persisted, found, err := store.Namespace(s.db, s.dir)
+	if err != nil {
+		return err
+	}
+	if !found {
+		if err = s.importLegacy(); err != nil {
+			return err
+		}
+		if persisted, found, err = store.Namespace(s.db, s.dir); err != nil {
+			return err
+		}
+	}
+	if found && persisted.HasPolicy {
+		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
+	}
+	return nil
+}
+
 // importLegacy moves a pre-SQLite namespace directory (policy.json +
 // index.json) into the database in one transaction and renames the
 // originals aside. A directory without legacy files is registered as an
@@ -179,27 +189,9 @@ func (s *cacheStore) importLegacy() error {
 	if hadPolicy {
 		ns.MaxBytes, ns.MaxEntryBytes, ns.TTLSeconds, ns.HasPolicy = policy.MaxBytes, policy.MaxEntryBytes, policy.TTLSeconds, true
 	}
-	var snapshots []store.Snapshot
-	contents, err := os.ReadFile(filepath.Join(s.dir, "index.json"))
-	if err != nil && !os.IsNotExist(err) {
+	snapshots, err := legacyIndexSnapshots(s.dir)
+	if err != nil {
 		return err
-	}
-	if err == nil {
-		var index cacheIndex
-		if err = json.Unmarshal(contents, &index); err != nil {
-			return fmt.Errorf("import legacy cache index: %w", err)
-		}
-		if index.Version != cacheIndexVersion {
-			return fmt.Errorf("unsupported legacy cache index version %d", index.Version)
-		}
-		for id, e := range index.Entries {
-			if e == nil || e.ID != id || filepath.Base(e.Filename) != e.Filename || e.Checksum == "" || len(e.PromptTokens) == 0 {
-				continue
-			}
-			if snap, ok := snapshotFromEntry(e); ok {
-				snapshots = append(snapshots, snap)
-			}
-		}
 	}
 	if err = store.ImportNamespace(s.db, ns, snapshots); err != nil {
 		return fmt.Errorf("import legacy cache namespace: %w", err)
@@ -211,6 +203,36 @@ func (s *cacheStore) importLegacy() error {
 		}
 	}
 	return nil
+}
+
+// legacyIndexSnapshots decodes a pre-SQLite index.json into committed-ready
+// rows, dropping entries the same validation the legacy loader applied
+// would have dropped. A missing file yields no rows, not an error.
+func legacyIndexSnapshots(dir string) ([]store.Snapshot, error) {
+	contents, err := os.ReadFile(filepath.Join(dir, "index.json"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var index cacheIndex
+	if err = json.Unmarshal(contents, &index); err != nil {
+		return nil, fmt.Errorf("import legacy cache index: %w", err)
+	}
+	if index.Version != cacheIndexVersion {
+		return nil, fmt.Errorf("unsupported legacy cache index version %d", index.Version)
+	}
+	var snapshots []store.Snapshot
+	for id, e := range index.Entries {
+		if e == nil || e.ID != id || filepath.Base(e.Filename) != e.Filename || e.Checksum == "" || len(e.PromptTokens) == 0 {
+			continue
+		}
+		if snap, ok := snapshotFromEntry(e); ok {
+			snapshots = append(snapshots, snap)
+		}
+	}
+	return snapshots, nil
 }
 
 func readCachePolicy(dir string) (cachePolicy, bool) {

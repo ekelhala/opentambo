@@ -19,7 +19,7 @@ func openTestStore(t *testing.T) (string, *sql.DB) {
 	if err = Migrate(db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return path, db
 }
 

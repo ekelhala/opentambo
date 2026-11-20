@@ -93,7 +93,7 @@ func Namespaces(db *sql.DB) ([]CacheNamespace, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CacheNamespace
 	for rows.Next() {
 		var (
@@ -227,7 +227,7 @@ func snapshotsWhere(db *sql.DB, where string, args ...any) ([]Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Snapshot
 	for rows.Next() {
 		var (

@@ -176,7 +176,7 @@ func Downloads(db *sql.DB) ([]Download, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Download
 	for rows.Next() {
 		var (
@@ -241,7 +241,7 @@ func Profiles(db *sql.DB) ([]Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Profile
 	for rows.Next() {
 		var p Profile
@@ -293,7 +293,7 @@ func RunHistory(db *sql.DB, limit int) ([]RunRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []RunRecord
 	for rows.Next() {
 		var (
