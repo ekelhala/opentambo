@@ -42,10 +42,14 @@ source-line coverage; the annotated per-line view is `coverage.html`.
 - Floors in `test/coverage-baseline.txt` are a ratchet: raising them is
   normal, lowering one or deleting a rule requires a policy note in the PR.
   A missing `coverage.out` artifact fails the check outright.
-- `tools/covdiff` intersects `git diff -U0` hunk headers with the coverage
-  profile and fails when changed executable lines fall below 90%. When no
-  eligible executable line changed it reports `N/A` and passes — a docs-only
-  delta is not blocked by a meaningless 0/0.
+- `tools/covdiff` intersects `git diff -U0` hunk headers with coverage
+  profiles and fails when changed executable lines fall below 90%. It accepts
+  multiple profiles and counts a line as covered when any profile executes
+  it: the gate runs on `coverage.out` plus `coverage.integration.out` when
+  present, so paths only a real process reaches — `main()`, CLI exit codes —
+  are proven by executing them, not exempted. When no eligible executable
+  line changed it reports `N/A` and passes — a docs-only delta is not blocked
+  by a meaningless 0/0.
 
 ## Real-backend integration suite
 
@@ -86,6 +90,11 @@ Scenarios:
   probe marks the cache `unsupported` while inference keeps flowing uncached.
   This stub covers only the fault-injection scenario; the reuse evidence
   itself always comes from the pinned real build.
+- CLI surface of the real instrumented binary: unknown flags exit with usage
+  code 2, `-h` prints the flag summary, invalid `-downloads` fails startup,
+  `OPENTAMBO_LISTEN` is honoured and reported on the startup line, and
+  SIGTERM shuts down cleanly. The gate tool itself is also executed under
+  `-cover` on both pass and fail outcomes.
 
 Zero executed integration tests fail the suite: `TestMain` requires instrumented
 subprocess profiles and merges them into `coverage.integration.out`.
