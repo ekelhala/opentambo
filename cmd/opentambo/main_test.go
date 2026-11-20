@@ -125,7 +125,7 @@ func TestServeLifecycle(t *testing.T) {
 	// The listener is fully released.
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err == nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatal("port still accepting connections after shutdown")
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,20 +30,30 @@ import (
 const modulePrefix = "github.com/ekelhala/opentambo/"
 
 func main() {
-	base := flag.String("base", "origin/main", "git base ref for the changed-line comparison")
-	threshold := flag.Float64("threshold", 90, "required coverage percentage of changed executable lines")
-	flag.Parse()
-	profile := flag.Arg(0)
-	if profile == "" {
-		profile = "coverage.out"
-	}
-	if err := run(*base, profile, *threshold); err != nil {
+	if err := runCLI(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "covdiff:", err)
 		os.Exit(1)
 	}
 }
 
-func run(base, profile string, threshold float64) error {
+// runCLI is the testable body of the command: parse flags, evaluate the
+// profile, and report. It returns an error instead of exiting.
+func runCLI(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("covdiff", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	base := fs.String("base", "origin/main", "git base ref for the changed-line comparison")
+	threshold := fs.Float64("threshold", 90, "required coverage percentage of changed executable lines")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	profile := fs.Arg(0)
+	if profile == "" {
+		profile = "coverage.out"
+	}
+	return run(*base, profile, *threshold, stdout)
+}
+
+func run(base, profile string, threshold float64, stdout io.Writer) error {
 	changed, err := ChangedLines(base)
 	if err != nil {
 		return err
@@ -52,16 +63,18 @@ func run(base, profile string, threshold float64) error {
 		return err
 	}
 	report := Evaluate(changed, blocks)
+	// Report writes are best-effort: a closed stdout must not turn a
+	// coverage verdict into a different error.
 	if report.Total == 0 {
-		fmt.Println("changed-coverage: N/A (no changed executable Go lines against", base+")")
+		_, _ = fmt.Fprintln(stdout, "changed-coverage: N/A (no changed executable Go lines against", base+")")
 		return nil
 	}
 	pct := 100 * float64(report.Covered) / float64(report.Total)
-	fmt.Printf("changed-coverage: %d/%d executable changed lines (%.1f%%) vs %s\n", report.Covered, report.Total, pct, base)
+	_, _ = fmt.Fprintf(stdout, "changed-coverage: %d/%d executable changed lines (%.1f%%) vs %s\n", report.Covered, report.Total, pct, base)
 	for _, f := range report.Files {
-		fmt.Printf("  %s: %d/%d\n", f.File, f.Covered, f.Total)
+		_, _ = fmt.Fprintf(stdout, "  %s: %d/%d\n", f.File, f.Covered, f.Total)
 		for _, line := range f.Uncovered {
-			fmt.Printf("    uncovered changed line %d\n", line)
+			_, _ = fmt.Fprintf(stdout, "    uncovered changed line %d\n", line)
 		}
 	}
 	if pct < threshold {
@@ -99,9 +112,9 @@ func ParseDiffHunks(diff []byte) FileLines {
 	for scanner.Scan() {
 		text := scanner.Text()
 		if m := changedHeader.FindStringSubmatch(text); m != nil {
-			file = m[1]
-			if file == "/dev/null" || !Eligible(file) {
-				file = ""
+			file = ""
+			if m[1] != "/dev/null" && Eligible(m[1]) {
+				file = m[1]
 			}
 			continue
 		}
@@ -109,23 +122,33 @@ func ParseDiffHunks(diff []byte) FileLines {
 			continue
 		}
 		if m := changedHunk.FindStringSubmatch(text); m != nil {
-			start, _ := strconv.Atoi(m[1])
-			count := 1
-			if m[2] != "" {
-				count, _ = strconv.Atoi(m[2])
-			}
-			if count == 0 { // pure deletion
-				continue
-			}
-			if lines[file] == nil {
-				lines[file] = map[int]bool{}
-			}
-			for i := start; i < start+count; i++ {
-				lines[file][i] = true
-			}
+			recordAddedLines(lines, file, m)
 		}
 	}
 	return lines
+}
+
+// recordAddedLines adds the +side line range of one hunk header to the set.
+func recordAddedLines(lines FileLines, file string, hunk []string) {
+	start, err := strconv.Atoi(hunk[1])
+	if err != nil {
+		return
+	}
+	count := 1
+	if hunk[2] != "" {
+		if count, err = strconv.Atoi(hunk[2]); err != nil {
+			return
+		}
+	}
+	if count == 0 { // pure deletion
+		return
+	}
+	if lines[file] == nil {
+		lines[file] = map[int]bool{}
+	}
+	for i := start; i < start+count; i++ {
+		lines[file][i] = true
+	}
 }
 
 // Eligible reports whether a repo-relative path participates in the
@@ -215,6 +238,15 @@ type Report struct {
 	Files   []FileReport
 }
 
+// lineStatus is the coverage verdict for one changed line.
+type lineStatus int
+
+const (
+	lineNotExecutable lineStatus = iota // outside any statement block
+	lineCovered
+	lineUncovered
+)
+
 // Evaluate determines, for every changed line, whether at least one
 // covering profile block was executed. Lines outside any block (comments,
 // blanks, import lines) are not executable and do not count.
@@ -223,50 +255,63 @@ func Evaluate(changed FileLines, blocks []Block) Report {
 	for _, b := range blocks {
 		byFile[b.File] = append(byFile[b.File], b)
 	}
-	var report Report
 	names := make([]string, 0, len(changed))
 	for file := range changed {
 		names = append(names, file)
 	}
 	sort.Strings(names)
+	var report Report
 	for _, file := range names {
-		fileBlocks := byFile[file]
-		if len(fileBlocks) == 0 {
-			continue // file produced no statements (docs-only Go change, removed file)
+		fr, ok := evaluateFile(file, changed[file], byFile[file])
+		if !ok {
+			continue
 		}
-		lines := changed[file]
-		numbers := make([]int, 0, len(lines))
-		for n := range lines {
-			numbers = append(numbers, n)
-		}
-		sort.Ints(numbers)
-		fr := FileReport{File: file}
-		for _, n := range numbers {
-			executable, covered := false, false
-			for _, b := range fileBlocks {
-				if n >= b.StartLine && n <= b.EndLine {
-					executable = true
-					if b.Count > 0 {
-						covered = true
-						break
-					}
-				}
-			}
-			if !executable {
-				continue
-			}
-			fr.Total++
-			report.Total++
-			if covered {
-				fr.Covered++
-				report.Covered++
-			} else {
-				fr.Uncovered = append(fr.Uncovered, n)
-			}
-		}
-		if fr.Total > 0 {
-			report.Files = append(report.Files, fr)
-		}
+		report.Total += fr.Total
+		report.Covered += fr.Covered
+		report.Files = append(report.Files, fr)
 	}
 	return report
+}
+
+// evaluateFile scores the changed lines of one file. ok is false when the
+// file has no statement blocks or no executable change (removed file,
+// docs-only Go change).
+func evaluateFile(file string, lines map[int]bool, fileBlocks []Block) (FileReport, bool) {
+	if len(fileBlocks) == 0 {
+		return FileReport{}, false
+	}
+	numbers := make([]int, 0, len(lines))
+	for n := range lines {
+		numbers = append(numbers, n)
+	}
+	sort.Ints(numbers)
+	fr := FileReport{File: file}
+	for _, n := range numbers {
+		switch lineStatusOf(n, fileBlocks) {
+		case lineNotExecutable:
+			continue
+		case lineCovered:
+			fr.Total++
+			fr.Covered++
+		case lineUncovered:
+			fr.Total++
+			fr.Uncovered = append(fr.Uncovered, n)
+		}
+	}
+	return fr, fr.Total > 0
+}
+
+// lineStatusOf classifies one line against the file's statement blocks.
+func lineStatusOf(line int, blocks []Block) lineStatus {
+	status := lineNotExecutable
+	for _, b := range blocks {
+		if line < b.StartLine || line > b.EndLine {
+			continue
+		}
+		status = lineUncovered
+		if b.Count > 0 {
+			return lineCovered
+		}
+	}
+	return status
 }

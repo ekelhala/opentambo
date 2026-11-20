@@ -15,10 +15,12 @@ export OPENTAMBO_LISTEN
 # them). Both read the authoritative contract api/openapi.yaml.
 OAPI_CODEGEN_VERSION := v2.8.2
 
-# Pinned quality tooling (issue #19). The golangci-lint release binaries are
-# built with an older Go than this module targets, so the toolchain is forced
-# to the local one; CI installs the identical version.
+# Pinned quality tooling (issue #19). golangci-lint embeds the Go version it
+# was built with and refuses to run when that is lower than this module's go
+# directive, so the toolchain used to build it is pinned to match go.mod.
+# CI installs the identical version the same way.
 GOLANGCI_LINT_VERSION := v2.15.0
+GOLANGCI_GO_TOOLCHAIN := go1.27.0
 PRETTIER := $(CURDIR)/ui/node_modules/.bin/prettier
 
 all: build
@@ -70,7 +72,7 @@ fmt-check: ui/node_modules
 ## lint: pinned static analysis and complexity gates (Go + frontend)
 lint: ui/node_modules
 	go vet ./...
-	GOTOOLCHAIN=local go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
+	GOTOOLCHAIN=$(GOLANGCI_GO_TOOLCHAIN) go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
 	cd ui && bun run lint
 
 ## coverage: race+cover profile, annotated report, and baseline ratchet check

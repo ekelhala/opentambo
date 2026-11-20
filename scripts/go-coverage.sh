@@ -52,7 +52,7 @@ for dir in $(go list ./cmd/... ./internal/... ./tools/... 2>/dev/null); do
   internal/desk/api) continue ;; # generated wire types (issue #14)
   esac
   if [[ -n "$(find "${dir#github.com/ekelhala/opentambo/}" -maxdepth 1 -name '*.go' ! -name '*_test.go' 2>/dev/null)" ]]; then
-    if ! grep -q "^$dir:" "$PROFILE"; then
+    if ! grep -q "^$dir/" "$PROFILE"; then
       echo "coverage: FAIL package $rel has no profile blocks; exclusions need documented rules" >&2
       fail=1
     fi

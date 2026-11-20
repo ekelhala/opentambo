@@ -1,10 +1,106 @@
 package main
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.invalid",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.invalid")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestRunCLIEndToEndInTempRepo(t *testing.T) {
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	if err := os.MkdirAll(filepath.Join(repo, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := "package a\n\nfunc A() int {\n\treturn 1\n}\n"
+	if err := os.WriteFile(filepath.Join(repo, "a", "b.go"), []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-q", "-m", "initial")
+	// Append a covered and an uncovered statement.
+	added := original + "\nfunc B() int {\n\treturn 2\n}\n\nfunc C() int {\n\treturn 3\n}\n"
+	if err := os.WriteFile(filepath.Join(repo, "a", "b.go"), []byte(added), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(repo, "coverage.out")
+	body := "mode: atomic\n" +
+		modulePrefix + "a/b.go:7.16,9.2 2 1\n" + // func B body: covered
+		modulePrefix + "a/b.go:11.16,13.2 2 0\n" // func C body: uncovered
+	if err := os.WriteFile(profile, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(repo)
+	var stdout, stderr bytes.Buffer
+	err := runCLI([]string{"-base", "main", "-threshold", "90", profile}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("50% changed-line coverage must fail a 90% gate")
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "3/6 executable changed lines (50.0%)") || !strings.Contains(out, "uncovered changed line 12") {
+		t.Errorf("unexpected report:\n%s", out)
+	}
+
+	// Same data with a threshold the run satisfies must pass.
+	stdout.Reset()
+	if err := runCLI([]string{"-base", "main", "-threshold", "50", profile}, &stdout, &stderr); err != nil {
+		t.Fatalf("threshold 50 must pass: %v", err)
+	}
+
+	// A profile that cannot be read is an error, not a panic.
+	if err := runCLI([]string{"-base", "main", "missing.out"}, &stdout, &stderr); err == nil {
+		t.Fatal("missing profile must fail")
+	}
+}
+
+func TestRunCLINoExecutableChangeIsNA(t *testing.T) {
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	readme := "# project\n"
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte(readme), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", ".")
+	gitIn(t, repo, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte(readme+"\nmore docs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(repo, "coverage.out")
+	if err := os.WriteFile(profile, []byte("mode: atomic\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+	var stdout, stderr bytes.Buffer
+	if err := runCLI([]string{"-base", "main", profile}, &stdout, &stderr); err != nil {
+		t.Fatalf("docs-only change must not fail the gate: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "N/A") {
+		t.Errorf("expected N/A report, got:\n%s", stdout.String())
+	}
+}
+
+func TestRunCLIRejectsUnknownFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := runCLI([]string{"-bogus"}, &stdout, &stderr); err == nil {
+		t.Fatal("unknown flag must fail")
+	}
+}
 
 func TestParseDiffHunks(t *testing.T) {
 	diff := []byte(`diff --git a/internal/desk/app.go b/internal/desk/app.go
@@ -95,14 +191,14 @@ func TestEvaluateNoProfileBlocksIsNotExecutable(t *testing.T) {
 
 func TestEligible(t *testing.T) {
 	cases := map[string]bool{
-		"internal/desk/app.go":                 true,
-		"tools/covdiff/main.go":                true,
-		"internal/desk/app_test.go":            false,
-		"test/integration/lifecycle_test.go":   false,
-		"internal/desk/api/gen.go":             false,
-		"docs/testing.md":                      false,
-		"ui/src/App.tsx":                       false,
-		"test/integration/harness/helpers.go":  false,
+		"internal/desk/app.go":                true,
+		"tools/covdiff/main.go":               true,
+		"internal/desk/app_test.go":           false,
+		"test/integration/lifecycle_test.go":  false,
+		"internal/desk/api/gen.go":            false,
+		"docs/testing.md":                     false,
+		"ui/src/App.tsx":                      false,
+		"test/integration/harness/helpers.go": false,
 	}
 	for path, want := range cases {
 		if got := Eligible(path); got != want {
