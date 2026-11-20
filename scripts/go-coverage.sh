@@ -19,6 +19,7 @@ cd "$(dirname "$0")/.."
 
 BASELINE=test/coverage-baseline.txt
 PROFILE=coverage.out
+MERGED=coverage.merged.out
 MODULE=github.com/ekelhala/opentambo
 
 if [[ ! -f "$BASELINE" ]]; then
@@ -37,8 +38,24 @@ else
   go test -race -covermode=atomic -coverpkg=./... -coverprofile="$PROFILE" ./... >/dev/null
 fi
 
-total=$(go tool cover -func="$PROFILE" | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
-echo "coverage: module statement coverage ${total}% (profile: $PROFILE)"
+# With -coverpkg=./... every test binary records every instrumented block,
+# so the raw profile repeats each block once per test binary. Canonicalize
+# to one record per block, keeping the highest count: a block counts as
+# covered when any test binary executed it — the same any-profile semantics
+# as the changed-line gate. Measuring the raw file directly would dilute
+# every percentage by the number of test binaries.
+awk '
+  NR == 1 { print; next }
+  {
+    split($0, p, " ")
+    if (!(p[1] in seen)) { seen[p[1]] = 1; order[++n] = p[1]; stmt[p[1]] = p[2]; count[p[1]] = p[3] + 0 }
+    else if (p[3] + 0 > count[p[1]]) count[p[1]] = p[3] + 0
+  }
+  END { for (i = 1; i <= n; i++) { l = order[i]; print l, stmt[l], count[l] } }
+' "$PROFILE" > "$MERGED"
+
+total=$(go tool cover -func="$MERGED" | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+echo "coverage: module statement coverage ${total}% (profile: $MERGED, raw: $PROFILE)"
 
 # Package-set cross-check: every built package that owns statements must
 # appear in the profile, so a handwritten package cannot silently vanish
@@ -52,7 +69,7 @@ for dir in $(go list ./cmd/... ./internal/... ./tools/... 2>/dev/null); do
   internal/desk/api) continue ;; # generated wire types (issue #14)
   esac
   if [[ -n "$(find "${dir#github.com/ekelhala/opentambo/}" -maxdepth 1 -name '*.go' ! -name '*_test.go' 2>/dev/null)" ]]; then
-    if ! grep -q "^$dir/" "$PROFILE"; then
+    if ! grep -q "^$dir/" "$MERGED"; then
       echo "coverage: FAIL package $rel has no profile blocks; exclusions need documented rules" >&2
       fail=1
     fi
@@ -81,7 +98,7 @@ while read -r kind name floor; do
     } END {
       if (total_stmts == 0) print "0.0"
       else printf "%.1f", 100 * covered / total_stmts
-    }' "$PROFILE")
+    }' "$MERGED")
     want=$floor
     label="package $name"
     ;;
@@ -104,5 +121,5 @@ if [[ $fail -ne 0 ]]; then
   exit 1
 fi
 
-go tool cover -html="$PROFILE" -o coverage.html
+go tool cover -html="$MERGED" -o coverage.html
 echo "coverage: annotated report at coverage.html"
