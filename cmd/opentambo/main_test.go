@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -135,5 +136,44 @@ func TestServeReportsStartupFailure(t *testing.T) {
 	err := serve(context.Background(), options{listen: freeListenAddress(t), parallel: 0}, io.Discard)
 	if err == nil {
 		t.Fatal("invalid download parallelism must fail startup")
+	}
+}
+
+// failWriter models a closed stdout (e.g. a dead pipe).
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("stdout closed") }
+
+func TestServeReportsStdoutFailure(t *testing.T) {
+	o := options{
+		listen:   freeListenAddress(t),
+		models:   filepath.Join(t.TempDir(), "models"),
+		binary:   "llama-server",
+		data:     filepath.Join(t.TempDir(), "data"),
+		parallel: 1,
+	}
+	err := serve(context.Background(), o, failWriter{})
+	if err == nil || !strings.Contains(err.Error(), "stdout closed") {
+		t.Fatalf("a failing stdout must abort startup with its error, got %v", err)
+	}
+}
+
+// TestServeReportsBindFailure covers the ListenAndServe error path: a port
+// already held by another listener must surface as a startup failure.
+func TestServeReportsBindFailure(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	o := options{
+		listen:   listener.Addr().String(),
+		models:   filepath.Join(t.TempDir(), "models"),
+		binary:   "llama-server",
+		data:     filepath.Join(t.TempDir(), "data"),
+		parallel: 1,
+	}
+	if err := serve(context.Background(), o, io.Discard); err == nil {
+		t.Fatal("serving on an occupied port must fail")
 	}
 }
