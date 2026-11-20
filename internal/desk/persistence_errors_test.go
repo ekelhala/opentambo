@@ -195,3 +195,55 @@ func TestLaunchSurvivesRunHistoryFailure(t *testing.T) {
 		t.Fatal("launch did not start the process despite the history failure")
 	}
 }
+
+// Run-history rows must decode honestly: corrupt documents abort startup,
+// and rows written before a launch field existed fall back to their columns.
+func TestRunHistoryRowConversion(t *testing.T) {
+	if _, err := runFromRecord(store.RunRecord{ID: "r", LaunchJSON: "oops", CommandJSON: "[]"}); err == nil ||
+		!strings.Contains(err.Error(), "launch document") {
+		t.Fatalf("corrupt launch = %v", err)
+	}
+	if _, err := runFromRecord(store.RunRecord{ID: "r", LaunchJSON: "{}", CommandJSON: "nope"}); err == nil ||
+		!strings.Contains(err.Error(), "command document") {
+		t.Fatalf("corrupt command = %v", err)
+	}
+	run, err := runFromRecord(store.RunRecord{
+		ID: "r", Status: "stopped", Model: "m.gguf", Name: "m", Port: 8091,
+		LaunchJSON: `{}`, CommandJSON: `["llama-server"]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Launch.Model != "m.gguf" || run.Launch.Name != "m" || run.Launch.Port != 8091 {
+		t.Fatalf("row columns did not backfill the launch document: %+v", run.Launch)
+	}
+}
+
+func TestStartupFailsOnUndecodableRunHistory(t *testing.T) {
+	cases := []struct {
+		name     string
+		breakSQL []string
+		wantErr  string
+	}{
+		{
+			name: "closed read is impossible to fake, so corrupt the row",
+			breakSQL: []string{`INSERT INTO runs (id, status, model, name, port, launch_json, started)
+				VALUES ('r', 'stopped', 'm.gguf', 'm', 1, 'corrupt', '2026-01-01T00:00:00Z')`},
+			wantErr: "read run history r",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			base := t.TempDir()
+			data := filepath.Join(base, "data")
+			if err := os.MkdirAll(data, 0750); err != nil {
+				t.Fatal(err)
+			}
+			seededDB(t, data, c.breakSQL...)
+			if _, err := New(filepath.Join(base, "models"), "missing-llama-server", data, 2); err == nil ||
+				!strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("startup = %v, want %q", err, c.wantErr)
+			}
+		})
+	}
+}
