@@ -35,6 +35,7 @@ type Download struct {
 type Profile struct {
 	Name            string
 	Model           string
+	Alias           string
 	Port            int
 	Context         int
 	GPULayers       int
@@ -153,13 +154,14 @@ func DeleteDownload(db *sql.DB, id string) error {
 // SaveProfile upserts a launch profile by name.
 func SaveProfile(db *sql.DB, p Profile) error {
 	_, err := db.Exec(`INSERT INTO profiles
-		(name, model, port, context, gpu_layers, args_json, env_json, prompt_cache_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		(name, model, alias, port, context, gpu_layers, args_json, env_json, prompt_cache_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (name) DO UPDATE SET
-			model = excluded.model, port = excluded.port, context = excluded.context,
-			gpu_layers = excluded.gpu_layers, args_json = excluded.args_json,
-			env_json = excluded.env_json, prompt_cache_json = excluded.prompt_cache_json`,
-		p.Name, p.Model, p.Port, p.Context, p.GPULayers, p.ArgsJSON, p.EnvJSON, p.PromptCacheJSON)
+			model = excluded.model, alias = excluded.alias, port = excluded.port,
+			context = excluded.context, gpu_layers = excluded.gpu_layers,
+			args_json = excluded.args_json, env_json = excluded.env_json,
+			prompt_cache_json = excluded.prompt_cache_json`,
+		p.Name, p.Model, p.Alias, p.Port, p.Context, p.GPULayers, p.ArgsJSON, p.EnvJSON, p.PromptCacheJSON)
 	return err
 }
 
@@ -171,7 +173,7 @@ func DeleteProfile(db *sql.DB, name string) error {
 
 // Profiles returns every saved profile ordered by name.
 func Profiles(db *sql.DB) ([]Profile, error) {
-	rows, err := db.Query(`SELECT name, model, port, context, gpu_layers, args_json, env_json,
+	rows, err := db.Query(`SELECT name, model, alias, port, context, gpu_layers, args_json, env_json,
 		COALESCE(prompt_cache_json, '') FROM profiles ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -180,7 +182,7 @@ func Profiles(db *sql.DB) ([]Profile, error) {
 	var out []Profile
 	for rows.Next() {
 		var p Profile
-		if err = rows.Scan(&p.Name, &p.Model, &p.Port, &p.Context, &p.GPULayers,
+		if err = rows.Scan(&p.Name, &p.Model, &p.Alias, &p.Port, &p.Context, &p.GPULayers,
 			&p.ArgsJSON, &p.EnvJSON, &p.PromptCacheJSON); err != nil {
 			return nil, err
 		}

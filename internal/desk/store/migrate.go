@@ -90,6 +90,7 @@ CREATE TABLE downloads (
 CREATE TABLE profiles (
 	name              TEXT PRIMARY KEY,
 	model             TEXT NOT NULL,
+	alias             TEXT NOT NULL DEFAULT '',
 	port              INTEGER NOT NULL,
 	context           INTEGER NOT NULL,
 	gpu_layers        INTEGER NOT NULL,
