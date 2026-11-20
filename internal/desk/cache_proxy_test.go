@@ -262,7 +262,7 @@ func newCacheFixture(t *testing.T) *cacheFixture {
 	t.Helper()
 	a := testApp(t, "unused")
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func TestCacheProbeGatesOnParityAndSnapshots(t *testing.T) {
 func TestProbeRejectsParityMismatch(t *testing.T) {
 	a := testApp(t, "unused")
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

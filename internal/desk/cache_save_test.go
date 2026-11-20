@@ -141,7 +141,7 @@ func TestCacheStoreTempEstimateIsWorstCase(t *testing.T) {
 	// limit and one 60-byte committed snapshot. The average-based estimate
 	// reserved only 60 bytes and authorized a potential 100-byte write
 	// (160 total) past the 130-byte budget.
-	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 130, 100, 0)
+	store, err := newCacheStore(cacheTestDB(t), filepath.Join(dir, "ns"), "ns", 130, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestCacheStoreGrowingSnapshotsStayWithinBudget(t *testing.T) {
 	dir := t.TempDir()
 	// Growing-snapshot regression: a small committed snapshot must not
 	// under-reserve the store for a much larger snapshot written later.
-	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 1000, 1000, 0)
+	store, err := newCacheStore(cacheTestDB(t), filepath.Join(dir, "ns"), "ns", 1000, 1000, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestCacheStoreGrowingSnapshotsStayWithinBudget(t *testing.T) {
 
 func TestCacheStoreTempWriteReservationAccounting(t *testing.T) {
 	dir := t.TempDir()
-	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 1<<20, 1<<18, 0)
+	store, err := newCacheStore(cacheTestDB(t), filepath.Join(dir, "ns"), "ns", 1<<20, 1<<18, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestCacheStoreTempWriteReservationAccounting(t *testing.T) {
 
 func TestCacheStoreSweepsAbandonedTempFiles(t *testing.T) {
 	dir := t.TempDir()
-	store, err := newCacheStore(filepath.Join(dir, "ns"), "ns", 1<<20, 1<<18, 0)
+	store, err := newCacheStore(cacheTestDB(t), filepath.Join(dir, "ns"), "ns", 1<<20, 1<<18, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
