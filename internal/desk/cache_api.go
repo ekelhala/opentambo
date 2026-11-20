@@ -34,7 +34,7 @@ func (a *App) cacheStoreFor(dir, namespace string, spec PromptCache) (*cacheStor
 		}
 		return store, nil
 	}
-	opened, err := newCacheStore(resolved, namespace, spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds))
+	opened, err := newCacheStore(a.db, resolved, namespace, spec.MaxBytes, spec.MaxEntryBytes, secondsDuration(spec.TTLSeconds))
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (a *App) registryCacheStores() []*cacheStore {
 			if _, seen := known[dir]; seen {
 				continue
 			}
-			store, err := observeCacheStore(dir, item.Name())
+			store, err := observeCacheStore(a.db, dir, item.Name())
 			if err != nil {
 				continue
 			}
