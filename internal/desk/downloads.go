@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ekelhala/opentambo/internal/desk/api"
+	"github.com/ekelhala/opentambo/internal/desk/store"
 )
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -309,6 +310,7 @@ func (a *App) transfer(ctx context.Context, j *Job) error {
 	buffer := make([]byte, 256<<10)
 	started := time.Now()
 	var downloaded int64
+	lastCheckpoint := started
 	for {
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
@@ -323,7 +325,16 @@ func (a *App) transfer(ctx context.Context, j *Job) error {
 			a.mu.Lock()
 			j.Bytes = offset + downloaded
 			j.BytesPerSecond = float64(downloaded) / time.Since(started).Seconds()
+			// Bounded durable checkpoint: the resume cursor lands in the
+			// database at most every two seconds, and the row write happens
+			// after copying values out, so App.mu is never held over I/O.
+			checkpoint := time.Since(lastCheckpoint) >= 2*time.Second
+			snapshot := j.Job
 			a.mu.Unlock()
+			if checkpoint {
+				lastCheckpoint = time.Now()
+				_ = store.SaveDownload(a.db, downloadFromJob(&snapshot))
+			}
 		}
 		if readErr == io.EOF {
 			break
