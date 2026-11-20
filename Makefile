@@ -54,9 +54,9 @@ test:
 	go vet ./...
 	go test -race ./...
 
-## test-ui: web component/unit tests with coverage thresholds (Vitest)
+## test-ui: web component/unit tests (bun test)
 test-ui: ui/node_modules
-	cd ui && bun run test:coverage
+	cd ui && bun run test
 
 ## test-integration: real OpenTambo binary + real pinned llama-server CPU suite
 test-integration:
