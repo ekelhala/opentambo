@@ -117,14 +117,19 @@ CREATE TABLE runs (
 );
 CREATE INDEX runs_started_idx ON runs (started DESC);
 
--- Prompt-cache namespaces: retained storage policy, never rewritten by
--- read-only listings. dir is the namespace directory absolute path.
+-- Prompt-cache namespaces: identity plus the retained storage policy,
+-- never rewritten by read-only listings. dir is the namespace directory
+-- absolute path. has_policy distinguishes a namespace whose limits were
+-- explicitly persisted (a launch or an imported policy file) from one
+-- merely observed with defaults, so listings never adopt or enforce
+-- guessed limits.
 CREATE TABLE cache_namespaces (
 	dir             TEXT PRIMARY KEY,
 	namespace       TEXT NOT NULL,
-	max_bytes       INTEGER NOT NULL,
-	max_entry_bytes INTEGER NOT NULL,
-	ttl_seconds     INTEGER NOT NULL
+	max_bytes       INTEGER NOT NULL DEFAULT 0,
+	max_entry_bytes INTEGER NOT NULL DEFAULT 0,
+	ttl_seconds     INTEGER NOT NULL DEFAULT 0,
+	has_policy      INTEGER NOT NULL DEFAULT 0
 );
 
 -- Snapshot metadata: checksums, verified prompt prefix, accounting.

@@ -28,6 +28,9 @@ type CacheNamespace struct {
 	MaxBytes      int64
 	MaxEntryBytes int64
 	TTLSeconds    int64
+	// HasPolicy marks limits that were explicitly persisted (a launch or
+	// an imported policy file). Observed namespaces carry identity only.
+	HasPolicy bool
 }
 
 // Snapshot is metadata for one KV snapshot file. PromptTokensJSON is the
@@ -45,36 +48,47 @@ type Snapshot struct {
 	State            string
 }
 
-// SaveNamespace upserts a namespace row, preserving the stored policy on
-// conflict unless the caller deliberately changes it.
+// SaveNamespace upserts a namespace row. The policy columns describe the
+// caller's current limits; HasPolicy marks whether they were explicitly
+// persisted, so an observed namespace never overwrites a real policy with
+// defaults by accident.
 func SaveNamespace(db *sql.DB, ns CacheNamespace) error {
-	_, err := db.Exec(`INSERT INTO cache_namespaces (dir, namespace, max_bytes, max_entry_bytes, ttl_seconds)
-		VALUES (?, ?, ?, ?, ?)
+	hasPolicy := 0
+	if ns.HasPolicy {
+		hasPolicy = 1
+	}
+	_, err := db.Exec(`INSERT INTO cache_namespaces (dir, namespace, max_bytes, max_entry_bytes, ttl_seconds, has_policy)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (dir) DO UPDATE SET
 			namespace = excluded.namespace, max_bytes = excluded.max_bytes,
-			max_entry_bytes = excluded.max_entry_bytes, ttl_seconds = excluded.ttl_seconds`,
-		ns.Dir, ns.Namespace, ns.MaxBytes, ns.MaxEntryBytes, ns.TTLSeconds)
+			max_entry_bytes = excluded.max_entry_bytes, ttl_seconds = excluded.ttl_seconds,
+			has_policy = excluded.has_policy`,
+		ns.Dir, ns.Namespace, ns.MaxBytes, ns.MaxEntryBytes, ns.TTLSeconds, hasPolicy)
 	return err
 }
 
 // Namespace reads one namespace row; ok is false when unknown.
 func Namespace(db *sql.DB, dir string) (CacheNamespace, bool, error) {
-	var ns CacheNamespace
-	err := db.QueryRow(`SELECT dir, namespace, max_bytes, max_entry_bytes, ttl_seconds
+	var (
+		ns        CacheNamespace
+		hasPolicy int
+	)
+	err := db.QueryRow(`SELECT dir, namespace, max_bytes, max_entry_bytes, ttl_seconds, has_policy
 		FROM cache_namespaces WHERE dir = ?`, dir).
-		Scan(&ns.Dir, &ns.Namespace, &ns.MaxBytes, &ns.MaxEntryBytes, &ns.TTLSeconds)
+		Scan(&ns.Dir, &ns.Namespace, &ns.MaxBytes, &ns.MaxEntryBytes, &ns.TTLSeconds, &hasPolicy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CacheNamespace{}, false, nil
 	}
 	if err != nil {
 		return CacheNamespace{}, false, err
 	}
+	ns.HasPolicy = hasPolicy == 1
 	return ns, true, nil
 }
 
 // Namespaces lists every persisted namespace ordered by directory.
 func Namespaces(db *sql.DB) ([]CacheNamespace, error) {
-	rows, err := db.Query(`SELECT dir, namespace, max_bytes, max_entry_bytes, ttl_seconds
+	rows, err := db.Query(`SELECT dir, namespace, max_bytes, max_entry_bytes, ttl_seconds, has_policy
 		FROM cache_namespaces ORDER BY dir`)
 	if err != nil {
 		return nil, err
@@ -82,13 +96,74 @@ func Namespaces(db *sql.DB) ([]CacheNamespace, error) {
 	defer rows.Close()
 	var out []CacheNamespace
 	for rows.Next() {
-		var ns CacheNamespace
-		if err = rows.Scan(&ns.Dir, &ns.Namespace, &ns.MaxBytes, &ns.MaxEntryBytes, &ns.TTLSeconds); err != nil {
+		var (
+			ns        CacheNamespace
+			hasPolicy int
+		)
+		if err = rows.Scan(&ns.Dir, &ns.Namespace, &ns.MaxBytes, &ns.MaxEntryBytes, &ns.TTLSeconds, &hasPolicy); err != nil {
 			return nil, err
 		}
+		ns.HasPolicy = hasPolicy == 1
 		out = append(out, ns)
 	}
 	return out, rows.Err()
+}
+
+// ImportNamespace records the namespace row and its snapshot rows in one
+// transaction: the legacy file import commits complete or not at all.
+// Existing snapshot rows for the directory are replaced, so a retried
+// import never duplicates.
+func ImportNamespace(db *sql.DB, ns CacheNamespace, snapshots []Snapshot) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	hasPolicy := 0
+	if ns.HasPolicy {
+		hasPolicy = 1
+	}
+	if _, err = tx.Exec(`INSERT INTO cache_namespaces (dir, namespace, max_bytes, max_entry_bytes, ttl_seconds, has_policy)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (dir) DO UPDATE SET
+			namespace = excluded.namespace, max_bytes = excluded.max_bytes,
+			max_entry_bytes = excluded.max_entry_bytes, ttl_seconds = excluded.ttl_seconds,
+			has_policy = excluded.has_policy`,
+		ns.Dir, ns.Namespace, ns.MaxBytes, ns.MaxEntryBytes, ns.TTLSeconds, hasPolicy); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`DELETE FROM cache_snapshots WHERE ns_dir = ?`, ns.Dir); err != nil {
+		return err
+	}
+	for _, s := range snapshots {
+		s.NamespaceDir = ns.Dir
+		if err = insertSnapshotTx(tx, s, SnapshotCommitted); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ReplaceSnapshots atomically rewrites every snapshot row of one namespace
+// with the committed set the caller supplies: rows absent from the
+// argument are removed. This is the cache store's durable commit point;
+// blob files themselves stay on disk.
+func ReplaceSnapshots(db *sql.DB, dir string, snapshots []Snapshot) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.Exec(`DELETE FROM cache_snapshots WHERE ns_dir = ?`, dir); err != nil {
+		return err
+	}
+	for _, s := range snapshots {
+		s.NamespaceDir = dir
+		if err = insertSnapshotTx(tx, s, SnapshotCommitted); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // InsertPublishing records snapshot metadata before the blob rename so an
@@ -104,6 +179,12 @@ func CommitSnapshot(db *sql.DB, s Snapshot) error {
 }
 
 func insertSnapshot(db *sql.DB, s Snapshot, state string) error {
+	return insertSnapshotTx(db, s, state)
+}
+
+// insertSnapshotTx works with *sql.DB and *sql.Tx alike so batch writers
+// can commit whole snapshot sets in one transaction.
+func insertSnapshotTx(db execer, s Snapshot, state string) error {
 	_, err := db.Exec(`INSERT INTO cache_snapshots
 		(id, ns_dir, filename, checksum, prompt_tokens_json, saved_tokens, bytes, created_at, last_used_at, state)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -115,6 +196,17 @@ func insertSnapshot(db *sql.DB, s Snapshot, state string) error {
 		s.ID, s.NamespaceDir, s.Filename, s.Checksum, s.PromptTokensJSON, s.SavedTokens, s.Bytes,
 		encodeTime(s.CreatedAt), encodeTime(s.LastUsedAt), state)
 	return err
+}
+
+// execer is satisfied by *sql.DB and *sql.Tx.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+// SnapshotsInDir returns every snapshot row of one namespace regardless of
+// state; file recovery reconciles the directory against this set.
+func SnapshotsInDir(db *sql.DB, dir string) ([]Snapshot, error) {
+	return snapshotsWhere(db, `ns_dir = ?`, dir)
 }
 
 // Snapshots returns the committed snapshots of one namespace ordered by
