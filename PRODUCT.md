@@ -24,7 +24,7 @@ One Go binary with the UI embedded, no database, npm, Docker, or bundled inferen
 
 - Linux inference host (amd64/arm64). Building needs Go 1.25+; running needs only the binary and a working `llama-server` build.
 - Listens on loopback (`127.0.0.1:8090` by default); security is delegated to the user's Pangolin access policy, with Newt tunneling when on another host.
-- Models live in a mounted GGUF directory (`--models`); transfer staging and state live under `--data` (`state.json`, owner-only permissions, plaintext env overrides).
+- Models live in a mounted GGUF directory (`--models`); durable state lives in an embedded SQLite database under `--data` (`opentambo.db`, owner-only permissions, plaintext env overrides), with GGUF models and KV snapshot blobs kept as ordinary files beside it.
 - LiteLLM is the upstream gateway that owns client keys, policies, and its own database. OpenTambo does not sync its model list into LiteLLM; routes are registered there once per API model name.
 - Panel workflows map 1:1 to README sections: Downloads (queue GGUFs by repo + filename), Models (scan, inspect, launch, delete), Servers (launch form, PID/state/logs/health, stop-then-kill).
 - Distribution: GitHub Actions artifacts and `v*` GitHub Releases; optional systemd unit at `deploy/opentambo.service`.
@@ -47,7 +47,7 @@ Deliberate boundaries (documented in README; future work must not quietly cross 
 - No GPU memory/temperature, slot activity, or throughput telemetry; no log persistence; no automatic eviction, model loading, or LiteLLM registration.
 - Pre-existing `llama-server` on port 8080 is not adopted; managed processes bind to `127.0.0.1` only; one opentambo instance per data directory; model servers do not auto-restart with the manager.
 
-Architecture posture (user-confirmed "mostly, but flexible"): single Go binary + embedded UI, no database/npm/Docker, delegated auth, files-as-inventory are strong preferences, not vows — future work may add auth, a database, or dependencies when a concrete need justifies it.
+Architecture posture (user-confirmed "mostly, but flexible"): single Go binary + embedded UI, embedded SQLite (no external database service), no npm/Docker, delegated auth, files-as-inventory are strong preferences, not vows — future work may add auth or dependencies when a concrete need justifies it.
 
 Terminology: **models** = GGUF files on disk; **downloads** = queued Hugging Face jobs; **servers** = managed `llama-server` processes; **API model name/alias** = the stable gateway name passed to the child via `--alias`.
 

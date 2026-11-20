@@ -85,6 +85,13 @@ Full workflow and rationale: [docs/api-contracts.md](docs/api-contracts.md).
   `internal/desk/app.go`).
 - Request bodies on owned routes are decoded with `DisallowUnknownFields` and
   a 64 KiB limit; keep that when adding endpoints.
+- Durable structured state (jobs, profiles, run history, cache namespaces,
+  snapshot metadata, import markers) lives in the embedded SQLite database at
+  `<data>/opentambo.db`, accessed only through `internal/desk/store`. Store
+  types stay wire-separated: handlers translate between `store` rows and API
+  records, never leak rows to the UI. GGUF models and KV snapshot blobs stay
+  ordinary files. The binary must stay CGO-free: the pure-Go driver is the
+  only SQLite implementation.
 - The shipped binary must stay CGO-free and generator-free: `CGO_ENABLED=0
 go build -tags ui`.
 
