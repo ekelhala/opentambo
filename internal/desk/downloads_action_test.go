@@ -10,9 +10,78 @@ import (
 	"time"
 
 	"github.com/ekelhala/opentambo/internal/desk/api"
+	"github.com/ekelhala/opentambo/internal/desk/store"
 )
 
 // --- download job actions (jobAction) --------------------------------------
+
+// A transfer slower than the checkpoint interval must persist its resume
+// cursor while running, not only when it finishes.
+type chunkedSlowBody struct{ remain []byte }
+
+func (s *chunkedSlowBody) Read(p []byte) (int, error) {
+	if len(s.remain) == 0 {
+		return 0, io.EOF
+	}
+	time.Sleep(700 * time.Millisecond)
+	n := copy(p, s.remain[:min(len(s.remain), 8)])
+	s.remain = s.remain[n:]
+	return n, nil
+}
+
+func TestDownloadCheckpointsResumeCursorWhileTransferring(t *testing.T) {
+	a := testApp(t, "unused")
+	payload := append([]byte("GGUF"), make([]byte, 32)...)
+	a.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Body:          io.NopCloser(&chunkedSlowBody{remain: payload}),
+			ContentLength: int64(len(payload)),
+			Header:        http.Header{"ETag": []string{`"slow1"`}},
+			Request:       r,
+		}, nil
+	})}
+	a.mu.Lock()
+	a.jobs["slow"] = &Job{Job: api.Job{
+		ID:     "slow",
+		Status: api.JobStatusInterrupted,
+		URL:    "https://huggingface.co/org/repo/resolve/main/slow.gguf",
+		File:   "org/repo/slow.gguf",
+	}}
+	a.mu.Unlock()
+	if rec := request(t, a, "POST", "/api/downloads/slow/resume", ""); rec.Code != 202 {
+		t.Fatalf("resume status = %d, want 202", rec.Code)
+	}
+	sawCheckpoint := false
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		rows, err := store.Downloads(a.db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if row.ID == "slow" && row.Bytes > 0 {
+				sawCheckpoint = true
+			}
+		}
+		a.mu.Lock()
+		status := a.jobs["slow"].Status
+		a.mu.Unlock()
+		if status == api.JobStatusCompleted {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job never completed (%v)", status)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !sawCheckpoint {
+		t.Fatal("no progress row landed in the database during the transfer")
+	}
+	if _, err := os.Stat(filepath.Join(a.models, "org/repo/slow.gguf")); err != nil {
+		t.Fatalf("slow download did not publish its file: %v", err)
+	}
+}
 
 func TestJobActionUnknownAndMissing(t *testing.T) {
 	a := testApp(t, "unused")
