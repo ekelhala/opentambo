@@ -48,7 +48,60 @@ func (a *App) openDurable() error {
 		_ = db.Close()
 		return fmt.Errorf("demote stale run records: %w", err)
 	}
+	if err = a.loadRunHistory(); err != nil {
+		_ = db.Close()
+		return err
+	}
 	return nil
+}
+
+// recentRunHistoryLimit bounds how much run history the working set keeps;
+// the database always holds everything.
+const recentRunHistoryLimit = 50
+
+// loadRunHistory repopulates the run working map with recent history rows
+// (already demoted: a recorded PID is never proof of a supervised process),
+// so restarting the manager shows what ran without ever claiming a dead
+// process is live. These rows have no cancellation hook, no log buffer
+// content and no cache coordinator.
+func (a *App) loadRunHistory() error {
+	records, err := store.RunHistory(a.db, recentRunHistoryLimit)
+	if err != nil {
+		return fmt.Errorf("read run history: %w", err)
+	}
+	for _, rec := range records {
+		run, err := runFromRecord(rec)
+		if err != nil {
+			return fmt.Errorf("read run history %s: %w", rec.ID, err)
+		}
+		a.runs[run.ID] = run
+	}
+	return nil
+}
+
+func runFromRecord(rec store.RunRecord) (*Run, error) {
+	var launch Launch
+	if err := json.Unmarshal([]byte(rec.LaunchJSON), &launch); err != nil {
+		return nil, fmt.Errorf("launch document: %w", err)
+	}
+	var command []string
+	if err := json.Unmarshal([]byte(rec.CommandJSON), &command); err != nil {
+		return nil, fmt.Errorf("command document: %w", err)
+	}
+	if launch.Model == "" {
+		launch.Model = rec.Model
+	}
+	if launch.Name == "" {
+		launch.Name = rec.Name
+	}
+	if launch.Port == 0 {
+		launch.Port = rec.Port
+	}
+	return &Run{Run: api.Run{
+		ID: rec.ID, Launch: launch, Command: command, PID: rec.PID,
+		Status: api.RunStatus(rec.Status), Started: rec.Started, Ended: rec.Ended,
+		Error: rec.Error,
+	}, log: &logBuffer{}}, nil
 }
 
 // loadDurable repopulates the job and profile working maps from the

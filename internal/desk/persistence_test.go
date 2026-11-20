@@ -177,4 +177,32 @@ func TestRunHistoryDemotedAfterRestart(t *testing.T) {
 	if spec.Model != "m.gguf" || spec.Port != 8091 {
 		t.Fatalf("launch payload = %+v", spec)
 	}
+	// The demoted history must also surface through the API, so the UI can
+	// show what ran without ever presenting a dead process as live.
+	surfaced, found := b.runs["r-live"]
+	if !found {
+		t.Fatal("run history not repopulated after restart")
+	}
+	if surfaced.Status != api.RunStatusStopped || surfaced.stop != nil {
+		t.Fatalf("surfaced run = %s (stop hook %v), want stopped with no control", surfaced.Status, surfaced.stop != nil)
+	}
+	if surfaced.Launch.Model != "m.gguf" || len(surfaced.Command) != 3 {
+		t.Fatalf("surfaced run lost its launch details: %+v", surfaced)
+	}
+	var state struct {
+		Runs []api.Run `json:"runs"`
+	}
+	rec := request(t, b, "GET", "/api/state", "")
+	if rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	if err = json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Runs) != 1 || state.Runs[0].ID != "r-live" || state.Runs[0].Status != api.RunStatusStopped {
+		t.Fatalf("/api/state runs = %+v", state.Runs)
+	}
+	if !strings.Contains(state.Runs[0].Error, "no longer supervised") {
+		t.Fatalf("API run lacks demotion explanation: %+v", state.Runs[0])
+	}
 }
