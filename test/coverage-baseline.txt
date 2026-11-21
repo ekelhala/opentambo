@@ -26,6 +26,10 @@
 # block, covered when any test binary executed it). The floors below are
 # the honest measurements with headroom; every number here is at or above
 # the corresponding diluted-era floor, so the ratchet was never lowered.
-module 78.0
-package cmd/opentambo 74.0
-package internal/desk/store 72.0
+#
+# Calibration note (issue #16): the lifecycle package and its failure-
+# injection suites raised the module measurement to 84.5% (cmd/opentambo
+# 83.3%). Floors raised accordingly; headroom kept for CI scheduling.
+module 82.0
+package cmd/opentambo 80.0
+package internal/desk/store 92.0
