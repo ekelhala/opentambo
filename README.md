@@ -13,6 +13,8 @@ external database service, npm, Docker, or bundled inference runtime.
 
 ## Install (Linux and macOS)
 
+Per-user install (Linux and macOS):
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ekelhala/opentambo/main/scripts/install.sh | sh
 ```
@@ -22,6 +24,19 @@ verifies its SHA-256 checksum, and installs the binary to
 `~/.local/bin/opentambo`. Set `OPENTAMBO_INSTALL_DIR` or `OPENTAMBO_VERSION`
 to override. Building from source instead: see
 [docs/development.md](docs/development.md).
+
+System service install (Linux with systemd) — one automated command:
+
+```sh
+sudo opentambo install
+```
+
+Provisions the standard layout (root-owned binary in `/usr/local/bin`,
+dedicated unprivileged `opentambo` account, generated hardened unit, state
+in `/var/lib/opentambo`, journald logs), then `sudo opentambo uninstall`
+removes the installation while preserving models, database state and
+configuration. [Deployment](docs/deployment.md) documents the full layout,
+overrides, state import from a per-user install, and the purge opt-ins.
 
 ## Run
 

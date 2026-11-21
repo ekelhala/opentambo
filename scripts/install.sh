@@ -3,13 +3,21 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/ekelhala/opentambo/main/scripts/install.sh | sh
 #
+# Per-user install into ~/.local/bin by default. On Linux with systemd, a
+# system-wide service install (dedicated account, generated unit, journald):
+#
+#   curl -fsSL .../install.sh | sudo OPENTAMBO_SYSTEM=1 sh
+#
 # Environment:
 #   OPENTAMBO_INSTALL_DIR  install directory (default: ~/.local/bin)
 #   OPENTAMBO_VERSION      release tag to install (default: latest release)
+#   OPENTAMBO_SYSTEM       "1" = system service install (root, Linux, systemd)
+#   OPENTAMBO_INSTALL_ARGS extra arguments passed to "opentambo install"
 set -eu
 
 REPO="ekelhala/opentambo"
 BIN="opentambo"
+SYSTEM="${OPENTAMBO_SYSTEM:-0}"
 INSTALL_DIR="${OPENTAMBO_INSTALL_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
@@ -58,6 +66,17 @@ else
 fi
 
 tar -xzf "$tmp/$asset" -C "$tmp"
+
+if [ "$SYSTEM" = "1" ]; then
+  # System service install: the freshly extracted binary installs itself to
+  # the standard system layout via its own lifecycle command.
+  [ "$goos" = linux ] || die "system service install requires Linux (per-user mode also supports macOS)"
+  [ -d /run/systemd/system ] || die "system service install requires a running systemd"
+  [ "$(id -u)" = 0 ] || die "system service install must run as root: sudo OPENTAMBO_SYSTEM=1 sh"
+  # shellcheck disable=SC2086
+  exec "$tmp/$BIN" install ${OPENTAMBO_INSTALL_ARGS:-}
+fi
+
 mkdir -p "$INSTALL_DIR"
 if ! install -m 755 "$tmp/$BIN" "$INSTALL_DIR/$BIN" 2>/dev/null; then
   # Overwriting a running binary fails on some systems; replace via temp file.
