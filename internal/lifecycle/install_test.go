@@ -16,12 +16,27 @@ type fakeCmd struct {
 	calls []string
 	out   map[string]string
 	fail  map[string]bool
+	// failCmd fails any invocation whose command line starts with the
+	// key, for lines containing dynamic staging paths.
+	failCmd map[string]bool
+}
+
+func (f *fakeCmd) fails(line string) bool {
+	if f.fail[line] {
+		return true
+	}
+	for prefix := range f.failCmd {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *fakeCmd) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	line := strings.TrimSpace(name + " " + strings.Join(args, " "))
 	f.calls = append(f.calls, line)
-	if f.fail[line] {
+	if f.fails(line) {
 		return []byte("boom"), errors.New("exit status 1")
 	}
 	if o, ok := f.out[line]; ok {

@@ -20,7 +20,7 @@ func TestInstallCommandFlagParsing(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "root privileges") {
 		t.Fatalf("unprivileged install = %v", err)
 	}
-	err = runInstall([]string{"--listen", "127.0.0.1:9999"}, discardWriter{})
+	err = runInstall([]string{"--listen", "127.0.0.1:9999", "--extra-groups", "render,video"}, discardWriter{})
 	if err == nil || !strings.Contains(err.Error(), "root privileges") {
 		t.Fatalf("unprivileged install --listen = %v", err)
 	}

@@ -174,13 +174,17 @@ func (in *Installer) prepareDirs(rec *Record) error {
 func (in *Installer) mkdirManaged(dir string, mode os.FileMode) error {
 	full := in.Cfg.path(dir)
 	created := false
-	if _, err := os.Stat(full); os.IsNotExist(err) {
+	info, err := os.Stat(full)
+	switch {
+	case os.IsNotExist(err):
 		if err = os.MkdirAll(full, mode); err != nil {
 			return fmt.Errorf("create %s: %w", dir, err)
 		}
 		created = true
-	} else if err != nil {
+	case err != nil:
 		return fmt.Errorf("inspect %s: %w", dir, err)
+	case !info.IsDir():
+		return fmt.Errorf("%s exists but is not a directory", dir)
 	}
 	if err := os.Chmod(full, mode); err != nil {
 		return fmt.Errorf("permissions on %s: %w", dir, err)

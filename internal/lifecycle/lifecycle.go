@@ -168,8 +168,12 @@ func CheckHost() error {
 	return checkSystemd()
 }
 
+// systemdRunPath is the probe directory whose presence proves systemd runs
+// as PID 1. Tests point it somewhere absent to exercise the refusal.
+var systemdRunPath = "/run/systemd/system"
+
 func checkSystemd() error {
-	info, err := os.Stat("/run/systemd/system")
+	info, err := os.Stat(systemdRunPath)
 	if err != nil || !info.IsDir() {
 		return errors.New("systemd is not running on this host; automatic installation supports Linux with systemd only (nothing was changed)")
 	}
