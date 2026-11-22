@@ -1,11 +1,15 @@
 # opentambo
 
-**The waystation for your models.** A small, unauthenticated web control panel
-for native [`llama-server`](https://github.com/ggml-org/llama.cpp) processes:
-download GGUFs from Hugging Face, browse your model directory, launch and
-supervise server processes, and route OpenAI-compatible `/v1` traffic to them.
-One Go binary with the UI embedded — no database, npm, Docker, or bundled
-inference runtime.
+**The waystation for your models.** OpenTambo is a lightweight llama.cpp
+process manager and persistent KV-cache proxy with a web control panel.
+Configure, launch and supervise your own native
+[`llama-server`](https://github.com/ggml-org/llama.cpp) processes; preserve
+and restore computed inference state across conversation switches and process
+restarts for supported model/build combinations; and operate the model
+inventory, Hugging Face downloads, server lifecycle and cache management from
+the browser. OpenAI-compatible `/v1` routing keeps client URLs stable. One Go
+binary with the UI embedded — no database, npm, Docker, or bundled inference
+runtime.
 
 ## Install (Linux and macOS)
 

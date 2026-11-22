@@ -14,18 +14,18 @@ Secondary (confirmed, personal-first): homelab operators with a similar setup �
 
 ## Product Purpose
 
-A small, unauthenticated web control panel for native `llama-server` processes: download GGUFs from Hugging Face, browse the on-disk model directory, launch/manage server processes with exact arguments and environment, and proxy OpenAI-compatible `/v1` traffic to the running processes. It exists to replace hand-managed terminal sessions with one self-hosted binary, and to give LiteLLM a stable inference entry point — saved API model names keep client routes fixed when a child server's port or model changes. Success is the inference host being operable entirely from the panel while the machine stays the user's own.
+A lightweight llama.cpp process manager and persistent KV-cache proxy with a web control panel. OpenTambo configures, launches and supervises the operator's own native `llama-server` processes; preserves and restores computed inference state (KV cache) across conversation switches and process restarts for supported model/build combinations; and operates the model inventory, Hugging Face downloads, server lifecycle and cache management from the browser. It exists to replace hand-managed terminal sessions with one self-hosted binary, and to give LiteLLM a stable inference entry point — saved API model names keep client routes fixed when a child server's port or model changes. Success is the inference host being operable entirely from the panel while the machine stays the user's own.
 
 ## Positioning
 
-One Go binary with the UI embedded, no database, npm, Docker, or bundled inference runtime — it manages the user's own native `llama-server` build with full argument/env transparency instead of wrapping or hiding it, and doubles as a minimal OpenAI-compatible gateway that routes by the request's `model` field to managed processes. Neighboring stacks (Ollama, Open WebUI, serving platforms) either own the runtime or need heavy infrastructure; opentambo owns only the process management and keeps the exact command visible.
+One Go binary with the UI embedded, no database, npm, Docker, or bundled inference runtime — it manages the user's own native `llama-server` build with full argument/env transparency instead of wrapping or hiding it, and doubles as a minimal OpenAI-compatible gateway that routes by the request's `model` field to managed processes. Persistent KV caching is reuse of computed context: eligible model/build combinations save and restore slot state so switching conversations (or restarting the child process) does not reprocess shared prefixes; eligibility and the single-slot/endpoint limitations stay documented in docs/prompt-cache.md and docs/limitations.md. GGUF downloading, stable OpenAI-compatible routing and single-binary deployment are supporting capabilities. Neighboring stacks (Ollama, Open WebUI, serving platforms) either own the runtime or need heavy infrastructure; OpenTambo owns only the process management, the cache administration and the stable route, and keeps the exact command visible.
 
 ## Operating Context
 
 - Linux inference host (amd64/arm64). Building needs Go 1.25+; running needs only the binary and a working `llama-server` build.
 - Listens on loopback (`127.0.0.1:8090` by default); security is delegated to the user's Pangolin access policy, with Newt tunneling when on another host.
 - Models live in a mounted GGUF directory (`--models`); transfer staging and state live under `--data` (`state.json`, owner-only permissions, plaintext env overrides).
-- LiteLLM is the upstream gateway that owns client keys, policies, and its own database. opentambo does not sync its model list into LiteLLM; routes are registered there once per API model name.
+- LiteLLM is the upstream gateway that owns client keys, policies, and its own database. OpenTambo does not sync its model list into LiteLLM; routes are registered there once per API model name.
 - Panel workflows map 1:1 to README sections: Downloads (queue GGUFs by repo + filename), Models (scan, inspect, launch, delete), Servers (launch form, PID/state/logs/health, stop-then-kill).
 - Distribution: GitHub Actions artifacts and `v*` GitHub Releases; optional systemd unit at `deploy/opentambo.service`.
 

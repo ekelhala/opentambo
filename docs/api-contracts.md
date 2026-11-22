@@ -1,8 +1,8 @@
 # API contracts
 
-The HTTP surface of opentambo is split into two categories with different
+The HTTP surface of OpenTambo is split into two categories with different
 ownership rules. The split is deliberate and the CI enforces only the part
-opentambo owns.
+OpenTambo owns.
 
 ## Ownership rule
 

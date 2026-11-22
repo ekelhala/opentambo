@@ -227,7 +227,8 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
         <DialogHeader>
           <DialogTitle className="dialog-title">Configuration</DialogTitle>
           <DialogDescription className="dialog-lede">
-            How this manager was started. Files are the inventory; state lives beside them.
+            OpenTambo — a lightweight llama.cpp process manager and persistent KV-cache proxy with a web control panel.
+            How this manager was started: files are the inventory; state lives beside them.
           </DialogDescription>
         </DialogHeader>
         {state && (

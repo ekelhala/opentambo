@@ -1,6 +1,6 @@
 # Known limitations
 
-Deliberate scaffold boundaries — what opentambo does not do (yet):
+Deliberate scaffold boundaries — what OpenTambo does not do (yet):
 
 - **Downloads** support public repositories and exact GGUF filenames. There is
   no Hugging Face browser, gated-repository credential handling, shard

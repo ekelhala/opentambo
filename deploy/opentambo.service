@@ -1,5 +1,5 @@
 [Unit]
-Description=opentambo model and process manager
+Description=OpenTambo - llama.cpp process manager and persistent KV-cache proxy
 After=network-online.target
 Wants=network-online.target
 RequiresMountsFor=/srv/models

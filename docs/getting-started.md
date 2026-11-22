@@ -1,7 +1,9 @@
 # Getting started
 
-opentambo manages native `llama-server` processes for one model directory on
-one host. It needs only the binary and your own working `llama-server` build.
+OpenTambo is a lightweight llama.cpp process manager and persistent KV-cache
+proxy with a web control panel. It manages native `llama-server` processes for
+one model directory on one host and needs only the binary and your own working
+`llama-server` build.
 
 ## Flags
 

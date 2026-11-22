@@ -4,11 +4,14 @@ Guidance for automated agents and contributors working in this repository.
 
 ## What this project is
 
-opentambo is a single-binary local manager for `llama-server`: GGUF model
-shelf, Hugging Face downloads, managed run lifecycle, an OpenAI-compatible
-`/v1/*` gateway proxy, prompt-cache administration, and an embedded React UI.
-Go backend (`internal/desk`), bun/React frontend (`ui`), single static binary
-at release.
+OpenTambo — a lightweight llama.cpp process manager and persistent KV-cache
+proxy with a web control panel. Single-binary local manager for
+`llama-server`: GGUF model shelf, Hugging Face downloads, managed run
+lifecycle, an OpenAI-compatible `/v1/*` gateway proxy, prompt-cache
+administration, and an embedded React UI. Go backend (`internal/desk`),
+bun/React frontend (`ui`), single static binary at release. In prose use the
+product name **OpenTambo**; keep lowercase identifiers (`opentambo`
+executable, module paths, config keys, env vars) unchanged.
 
 ## Build and test
 
