@@ -16,15 +16,15 @@ The installer provisions everything itself and is idempotent — re-running it
 upgrades the binary and unit while preserving the service account,
 configuration, models and database state:
 
-| Resource | Location |
-| --- | --- |
-| Application binary | `/usr/local/bin/opentambo` (root-owned) |
-| Service identity | system user/group `opentambo`, login shell `/usr/sbin/nologin` |
+| Resource                    | Location                                                               |
+| --------------------------- | ---------------------------------------------------------------------- |
+| Application binary          | `/usr/local/bin/opentambo` (root-owned)                                |
+| Service identity            | system user/group `opentambo`, login shell `/usr/sbin/nologin`         |
 | Administrator configuration | `/etc/opentambo/` (plus the root-only ownership record `install.json`) |
-| Durable state / SQLite | `/var/lib/opentambo/` (service-owned, mode 0750) |
-| Managed model directory | `/var/lib/opentambo/models/` (override with `--models`) |
-| systemd unit | `/etc/systemd/system/opentambo.service` (generated) |
-| Logs | journald (`journalctl -u opentambo`) |
+| Durable state / SQLite      | `/var/lib/opentambo/` (service-owned, mode 0750)                       |
+| Managed model directory     | `/var/lib/opentambo/models/` (override with `--models`)                |
+| systemd unit                | `/etc/systemd/system/opentambo.service` (generated)                    |
+| Logs                        | journald (`journalctl -u opentambo`)                                   |
 
 Nothing is inferred from the invoking user's `HOME`, so the result is the
 same for any operator and any sudo configuration. Before changing the host
