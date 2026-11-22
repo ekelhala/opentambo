@@ -15,7 +15,7 @@ import (
 )
 
 func TestParseArgsDefaults(t *testing.T) {
-	o, err := parseArgs(nil, func(string) string { return "" })
+	o, _, err := parseArgs(nil, func(string) string { return "" })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestParseArgsDefaults(t *testing.T) {
 }
 
 func TestParseArgsEnvironmentDefault(t *testing.T) {
-	o, err := parseArgs(nil, func(k string) string {
+	o, _, err := parseArgs(nil, func(k string) string {
 		if k == "OPENTAMBO_LISTEN" {
 			return "127.0.0.1:9999"
 		}
@@ -40,7 +40,12 @@ func TestParseArgsEnvironmentDefault(t *testing.T) {
 }
 
 func TestParseArgsExplicitFlagBeatsEnvironment(t *testing.T) {
-	o, err := parseArgs([]string{"-listen", "127.0.0.1:7070"}, func(string) string { return "127.0.0.1:9999" })
+	o, _, err := parseArgs([]string{"-listen", "127.0.0.1:7070"}, func(k string) string {
+		if k == "OPENTAMBO_LISTEN" {
+			return "127.0.0.1:9999"
+		}
+		return ""
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,14 +55,14 @@ func TestParseArgsExplicitFlagBeatsEnvironment(t *testing.T) {
 }
 
 func TestParseArgsRejectsUnknownFlag(t *testing.T) {
-	if _, err := parseArgs([]string{"-bogus"}, func(string) string { return "" }); err == nil {
+	if _, _, err := parseArgs([]string{"-bogus"}, func(string) string { return "" }); err == nil {
 		t.Fatal("unknown flags must fail")
 	}
 }
 
 func TestParseArgsHelp(t *testing.T) {
 	// -h on a ContinueOnError flag set reports ErrHelp without exiting.
-	if _, err := parseArgs([]string{"-h"}, func(string) string { return "" }); err == nil {
+	if _, _, err := parseArgs([]string{"-h"}, func(string) string { return "" }); err == nil {
 		t.Fatal("help must stop execution")
 	}
 }
@@ -86,7 +91,7 @@ func TestServeLifecycle(t *testing.T) {
 	defer cancel()
 	var stdout bytes.Buffer
 	serveErr := make(chan error, 1)
-	go func() { serveErr <- serve(ctx, o, &stdout) }()
+	go func() { serveErr <- serve(ctx, o, nil, &stdout) }()
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	var health int
@@ -133,9 +138,155 @@ func TestServeLifecycle(t *testing.T) {
 
 func TestServeReportsStartupFailure(t *testing.T) {
 	// parallel outside the accepted range is rejected before the port binds.
-	err := serve(context.Background(), options{listen: freeListenAddress(t), parallel: 0}, io.Discard)
+	err := serve(context.Background(), options{listen: freeListenAddress(t), parallel: 0}, nil, io.Discard)
 	if err == nil {
 		t.Fatal("invalid download parallelism must fail startup")
+	}
+}
+
+// stageConfig writes an operator YAML file and returns its path.
+func stageConfig(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func yamlWith(listen, dir string) string {
+	return "schema_version: 1\nhttp:\n  listen: \"" + listen + "\"\npaths:\n  data_dir: \"" + dir + "/data\"\n  models_dir: \"" + dir + "/models\"\ndownloads:\n  parallel: 5\n"
+}
+
+func TestParseArgsYamlFileSuppliesValues(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir()))
+	o, eff, err := parseArgs([]string{"--config", path}, func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eff == nil || o.listen != "127.0.0.1:8123" || o.parallel != 5 {
+		t.Fatalf("YAML values must apply: %+v eff=%v", o, eff != nil)
+	}
+	if !strings.HasSuffix(o.data, "/data") || !strings.HasSuffix(o.models, "/models") {
+		t.Errorf("paths must come from the file: %+v", o)
+	}
+}
+
+func TestParseArgsEnvironmentOverridesYaml(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir()))
+	o, _, err := parseArgs([]string{"--config", path}, func(k string) string {
+		if k == "OPENTAMBO_LISTEN" {
+			return "127.0.0.1:9099"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.listen != "127.0.0.1:9099" {
+		t.Errorf("OPENTAMBO_LISTEN must override the file: %q", o.listen)
+	}
+}
+
+func TestParseArgsFlagOverridesEnvironmentAndYaml(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir()))
+	o, _, err := parseArgs([]string{"--config", path, "-listen", "127.0.0.1:7070"}, func(k string) string {
+		if k == "OPENTAMBO_LISTEN" {
+			return "127.0.0.1:9099"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.listen != "127.0.0.1:7070" {
+		t.Errorf("an explicit flag must win: %q", o.listen)
+	}
+}
+
+func TestParseArgsConfigEnvSelectsFile(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir()))
+	o, _, err := parseArgs(nil, func(k string) string {
+		if k == "OPENTAMBO_CONFIG" {
+			return path
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.listen != "127.0.0.1:8123" {
+		t.Errorf("OPENTAMBO_CONFIG must select the file: %q", o.listen)
+	}
+}
+
+func TestParseArgsMissingExplicitFileFails(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent.yaml")
+	if _, _, err := parseArgs([]string{"--config", missing}, func(string) string { return "" }); err == nil {
+		t.Fatal("an explicitly selected missing file must fail startup")
+	}
+}
+
+func TestParseArgsInvalidYamlFails(t *testing.T) {
+	path := stageConfig(t, "schema_version: 1\nbogus: true\n")
+	if _, _, err := parseArgs([]string{"--config", path}, func(string) string { return "" }); err == nil {
+		t.Fatal("an unknown field must fail startup")
+	}
+}
+
+func TestConfigCheckReportsValidFile(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir())+
+		"profiles:\n  tiny:\n    model: m.gguf\n    port: 8123\n    autostart: true\n")
+	var stdout bytes.Buffer
+	if err := runConfigCheck([]string{"--config", path}, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "configuration OK") || !strings.Contains(out, "profile tiny") {
+		t.Errorf("unexpected report: %s", out)
+	}
+}
+
+func TestConfigCheckRejectsInvalidFile(t *testing.T) {
+	path := stageConfig(t, "schema_version: 2\n")
+	if err := runConfigCheck([]string{"--config", path}, io.Discard); err == nil {
+		t.Fatal("an unsupported schema must be rejected")
+	}
+}
+
+func TestConfigCheckRejectsUnknownFlag(t *testing.T) {
+	if err := runConfigCheck([]string{"--bogus"}, io.Discard); err == nil {
+		t.Fatal("an unknown flag must be rejected")
+	}
+}
+
+func TestLifecycleCommandUnknownConfigSubcommand(t *testing.T) {
+	path := stageConfig(t, yamlWith("127.0.0.1:8123", t.TempDir()))
+	if handled, err := lifecycleCommand([]string{"config", "check", "--config", path}, io.Discard); !handled || err != nil {
+		t.Fatalf("config check must be dispatched: handled=%v err=%v", handled, err)
+	}
+	handled, err := lifecycleCommand([]string{"config", "oops"}, io.Discard)
+	if !handled || err == nil || !strings.Contains(err.Error(), "unknown config subcommand") {
+		t.Fatalf("handled=%v err=%v", handled, err)
+	}
+	handled, err = lifecycleCommand([]string{"config"}, io.Discard)
+	if !handled || err == nil {
+		t.Fatalf("bare config must report usage: handled=%v err=%v", handled, err)
+	}
+	if handled, err := lifecycleCommand([]string{"serve"}, io.Discard); handled || err != nil {
+		t.Fatalf("serve must fall through to the server: handled=%v err=%v", handled, err)
+	}
+}
+
+func TestConfigCheckWithoutAnyFile(t *testing.T) {
+	// With no --config, no env and a standard path staged to a location
+	// that cannot exist, the command must say so instead of silently
+	// passing.
+	original := configSystemPath
+	configSystemPath = filepath.Join(t.TempDir(), "absent", "config.yaml")
+	defer func() { configSystemPath = original }()
+	if err := runConfigCheck([]string{}, io.Discard); err == nil {
+		t.Fatal("no file to check must be an error")
 	}
 }
 
@@ -152,7 +303,7 @@ func TestServeReportsStdoutFailure(t *testing.T) {
 		data:     filepath.Join(t.TempDir(), "data"),
 		parallel: 1,
 	}
-	err := serve(context.Background(), o, failWriter{})
+	err := serve(context.Background(), o, nil, failWriter{})
 	if err == nil || !strings.Contains(err.Error(), "stdout closed") {
 		t.Fatalf("a failing stdout must abort startup with its error, got %v", err)
 	}
@@ -173,7 +324,7 @@ func TestServeReportsBindFailure(t *testing.T) {
 		data:     filepath.Join(t.TempDir(), "data"),
 		parallel: 1,
 	}
-	if err := serve(context.Background(), o, io.Discard); err == nil {
+	if err := serve(context.Background(), o, nil, io.Discard); err == nil {
 		t.Fatal("serving on an occupied port must fail")
 	}
 }
