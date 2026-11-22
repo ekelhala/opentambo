@@ -115,6 +115,52 @@ func usageCachedTokens(t *testing.T, response map[string]any) float64 {
 	return numeric(t, cached, "usage.prompt_tokens_details.cached_tokens")
 }
 
+// TestPromptCacheHybridModelProbeAndReuse is why the capability gate became
+// measured instead of a static architecture list: LFM2 is a hybrid model
+// (causal-convolution recurrent layers interleaved with attention) that the
+// old allow-list would have rejected at launch even though the pinned
+// llama.cpp build saves, restores, and reuses its recurrent memory. The
+// probe must classify it ready from evidence, and reuse must survive a
+// child restart — for a hybrid, the restored file carries the recurrent
+// state, so warmth after restart can only come from disk.
+func TestPromptCacheHybridModelProbeAndReuse(t *testing.T) {
+	llama := ensureLlamaServer(t)
+	m := startManager(t, llama)
+	port, err := freePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := map[string]any{
+		"model":        hybridModelRelPath,
+		"prompt_cache": map[string]any{"enabled": true, "min_reuse_tokens": 64},
+	}
+	run := m.launchRun("hybrid", port, spec)
+	id, _ := run["id"].(string)
+	summary := waitCacheReady(t, m, id)
+	if status, _ := summary["status"].(string); status != "ready" {
+		m.dumpLog()
+		t.Fatalf("hybrid probe must classify measured reuse as ready: %v", summary)
+	}
+
+	_, coldCache, coldPrompt := m.timedCompletion("hybrid", promptA)
+	if coldCache > coldPrompt/4 {
+		t.Fatalf("hybrid cold baseline is not cold: cache_n %.0f of %.0f prompt tokens", coldCache, coldPrompt)
+	}
+	m.timedCompletion("hybrid", promptB)
+	_, warmCache, warmPrompt := m.timedCompletion("hybrid", promptA)
+	assertWarm(t, "hybrid A/B/A second A", warmCache, warmPrompt, coldCache)
+
+	// Child restart: the recurrent memory is gone from RAM, so warmth here
+	// proves the snapshot round-trips hybrid state, not just attention KV.
+	m.stopRun(id)
+	run = m.launchRun("hybrid", port, spec)
+	id, _ = run["id"].(string)
+	waitCacheReady(t, m, id)
+	_, warmCache, warmPrompt = m.timedCompletion("hybrid", promptA)
+	assertWarm(t, "hybrid after child restart", warmCache, warmPrompt, coldCache)
+	m.stopRun(id)
+}
+
 // TestPromptCacheSurvivesChildAndManagerRestart proves the snapshot
 // namespace is stable: the same model + binary + configuration finds the
 // published snapshots after the child restarts and after OpenTambo itself

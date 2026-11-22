@@ -196,7 +196,7 @@ type CacheStats struct {
 	Saves           int64 `json:"saves"`
 }
 
-// CacheStatus Prompt-cache coordinator state. checking: the capability probe is still running; ready: save/restore are operational; unsupported: the build cannot persist cache state and requests run uncached; error: a slot-safety failure stopped the coordinator (manual restart needed).
+// CacheStatus Prompt-cache coordinator state. checking: the capability probe is still running; ready: the probe measured save, restore, and real prompt reuse on this exact model, binary, and configuration; unsupported: the combination lacks that reuse evidence (including architectures whose restored state is never reused) and requests run uncached; error: a slot-safety failure stopped the coordinator (manual restart needed).
 type CacheStatus string
 
 // CacheSummary Sanitized public view of a run's prompt-cache coordinator
@@ -210,7 +210,7 @@ type CacheSummary struct {
 	Requested      bool       `json:"requested"`
 	Stats          CacheStats `json:"stats"`
 
-	// Status Prompt-cache coordinator state. checking: the capability probe is still running; ready: save/restore are operational; unsupported: the build cannot persist cache state and requests run uncached; error: a slot-safety failure stopped the coordinator (manual restart needed).
+	// Status Prompt-cache coordinator state. checking: the capability probe is still running; ready: the probe measured save, restore, and real prompt reuse on this exact model, binary, and configuration; unsupported: the combination lacks that reuse evidence (including architectures whose restored state is never reused) and requests run uncached; error: a slot-safety failure stopped the coordinator (manual restart needed).
 	Status CacheStatus `json:"status"`
 }
 

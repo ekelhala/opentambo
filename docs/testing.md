@@ -75,6 +75,11 @@ Fixtures (pinned; corrupt caches are replaced, never trusted):
   `/tmp/opentambo-fixtures`) and extracted on first use.
 - Model: `models/unsloth/SmolLM2-135M-Instruct-GGUF/main/SmolLM2-135M-Instruct-Q4_K_M.gguf`
   from this repository (full-attention `llama` architecture, CPU-fast).
+- Hybrid model: `models/LiquidAI/LFM2-1.2B-GGUF/main/LFM2-1.2B-Q4_K_M.gguf`
+  (LFM2: causal-convolution recurrent layers with sparse attention), the
+  smallest CPU-friendly hybrid GGUF, exercising recurrent-memory
+  save/restore/reuse. SHA-256
+  `55175400e3f509a9616227afeffd58d87e80b9f628a5d3d54ada884d85221fed`.
 
 Scenarios:
 

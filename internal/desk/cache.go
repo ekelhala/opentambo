@@ -497,6 +497,12 @@ func (rc *RunCache) AwaitReady(ctx context.Context) {
 	rc.Probe(probeCtx)
 }
 
+// probeReuseMinTokens is the absolute floor of prompt tokens the probe must
+// see skipped by KV reuse after a save/erase/restore round-trip. The
+// fraction-based floor in probeSnapshotReuse does the heavy lifting; this
+// guards against a degenerate measurement on an unusually short prompt.
+const probeReuseMinTokens = 8
+
 // Probe verifies the child build can actually provide faithful prompts and
 // working slot snapshots before any cache decision is made. It runs once
 // after the child becomes healthy and holds the lease for its slot work.
@@ -506,7 +512,14 @@ func (rc *RunCache) AwaitReady(ctx context.Context) {
 //   - /apply-template + /tokenize reproduce the generation prompt token count
 //     for a representative multi-turn request (and again with tools when the
 //     request shape includes tools).
-//   - save, restore, and erase on slot 0 succeed end-to-end.
+//   - a save/erase/restore round-trip on slot 0 measurably skips prompt
+//     re-processing on a continuation request (probeSnapshotReuse).
+//
+// The reuse measurement is what makes capability evidence-based rather than
+// architecture-based: hybrid/recurrent models (Qwen3-Next-style SSM hybrids,
+// Mamba hybrids, sliding-window models) only pass when the engine can prove
+// it restores their state, and older builds that restore without reusing are
+// rejected here instead of silently re-prefilling every request.
 func (rc *RunCache) Probe(ctx context.Context) {
 	defer func() {
 		rc.mu.Lock()
@@ -574,27 +587,10 @@ func (rc *RunCache) Probe(ctx context.Context) {
 		return
 	}
 
-	tmpName := id() + ".tmp"
-	saved, err := rc.client.saveSlot(ctx, chatSlot, tmpName)
-	if err != nil {
-		rc.fail("slot save failed: " + err.Error())
+	if reason := rc.probeSnapshotReuse(ctx, messages, len(tokens)); reason != "" {
+		rc.fail(reason)
 		return
 	}
-	if saved.NSaved <= 0 {
-		rc.fail("slot save captured no tokens")
-		return
-	}
-	if _, err = rc.client.restoreSlot(ctx, chatSlot, tmpName); err != nil {
-		_ = rc.store.RemoveTemp(tmpName)
-		rc.fail("slot restore failed: " + err.Error())
-		return
-	}
-	if err = rc.client.eraseSlot(ctx, chatSlot); err != nil {
-		_ = rc.store.RemoveTemp(tmpName)
-		rc.fail("slot erase failed: " + err.Error())
-		return
-	}
-	_ = rc.store.RemoveTemp(tmpName)
 
 	rc.mu.Lock()
 	rc.nctx = nctx
@@ -603,6 +599,84 @@ func (rc *RunCache) Probe(ctx context.Context) {
 	rc.reason = ""
 	rc.liveTokens = nil
 	rc.mu.Unlock()
+}
+
+// probeSnapshotReuse proves the child can round-trip slot state through a
+// snapshot file and actually reuse it. It saves slot 0 (holding the probe
+// conversation from generateProbe), erases the slot so no live KV or prompt
+// cache survives, restores the file, and runs a continuation turn. The
+// backend's own reuse counter (timings.cache_n) must show that a substantial
+// prefix of the saved prompt was skipped. Because the slot was erased before
+// the restore, any measured reuse can only come from the snapshot itself —
+// this is the evidence gate for every architecture, including hybrid and
+// recurrent models whose state save/restore support has historically been
+// build- and model-dependent.
+func (rc *RunCache) probeSnapshotReuse(ctx context.Context, messages []map[string]any, promptTokens int) string {
+	tmpName := id() + ".tmp"
+	saved, err := rc.client.saveSlot(ctx, chatSlot, tmpName)
+	if err != nil {
+		return "slot save failed: " + err.Error()
+	}
+	if saved.NSaved <= 0 {
+		_ = rc.store.RemoveTemp(tmpName)
+		return "slot save captured no tokens"
+	}
+	// Erase first: without this the continuation could reuse live engine
+	// state and the measurement would prove nothing about the snapshot.
+	if err = rc.client.eraseSlot(ctx, chatSlot); err != nil {
+		_ = rc.store.RemoveTemp(tmpName)
+		return "slot erase failed: " + err.Error()
+	}
+	if _, err = rc.client.restoreSlot(ctx, chatSlot, tmpName); err != nil {
+		_ = rc.store.RemoveTemp(tmpName)
+		if clearErr := rc.client.eraseSlot(ctx, chatSlot); clearErr != nil {
+			return "slot restore failed and the slot could not be cleared: " + err.Error()
+		}
+		return "slot restore failed: " + err.Error()
+	}
+	_ = rc.store.RemoveTemp(tmpName)
+	reuseCacheN, err := rc.probeContinuation(ctx, messages)
+	clearErr := rc.client.eraseSlot(ctx, chatSlot)
+	if err != nil {
+		return "reuse probe generation failed: " + err.Error()
+	}
+	if clearErr != nil {
+		return "slot erase failed: " + clearErr.Error()
+	}
+	if reuseCacheN < probeReuseMinTokens || reuseCacheN*2 < promptTokens {
+		return fmt.Sprintf("snapshot restore did not reuse the prompt: %d of %d prompt tokens skipped by KV reuse (a build or architecture without validated state restore re-prefills instead)", reuseCacheN, promptTokens)
+	}
+	return ""
+}
+
+// probeContinuation runs the probe conversation extended with an assistant
+// turn and a new user question — the agent-loop shape real traffic uses —
+// and returns the number of prompt tokens the engine skipped through KV
+// reuse (timings.cache_n). The continuation is pinned to the owned slot and
+// asks for per-token timings so the response carries that counter.
+func (rc *RunCache) probeContinuation(ctx context.Context, messages []map[string]any) (int, error) {
+	turns := make([]map[string]any, 0, len(messages)+2)
+	turns = append(turns, messages...)
+	turns = append(turns,
+		map[string]any{"role": "assistant", "content": "llama"},
+		map[string]any{"role": "user", "content": "Say it again."})
+	body := map[string]any{"messages": turns, "max_tokens": 1, "temperature": 0, "id_slot": chatSlot, "timings_per_token": true}
+	raw, err := rc.client.doJSON(ctx, "POST", "/v1/chat/completions", body, controlResponseLimit)
+	if err != nil {
+		return 0, err
+	}
+	var out struct {
+		Timings *struct {
+			CacheN *float64 `json:"cache_n"`
+		} `json:"timings"`
+	}
+	if err = json.Unmarshal(raw, &out); err != nil {
+		return 0, fmt.Errorf("probe continuation: %w", err)
+	}
+	if out.Timings == nil || out.Timings.CacheN == nil {
+		return 0, errors.New("server did not report timings.cache_n with timings_per_token")
+	}
+	return int(*out.Timings.CacheN), nil
 }
 
 // generateProbe returns the prompt token count that the generation endpoint

@@ -22,11 +22,23 @@ truncated responses are never published.
 
 ## Compatibility is proven, not assumed
 
-Before serving, each child build passes a save/restore round-trip and a
-token-parity probe with the actual model. Snapshots are keyed by a namespace
-hash of the model file contents (all shards), the llama-server binary, and
-state-affecting settings such as context size and GPU layers — never by the
-alias alone. Changing those settings yields a fresh namespace.
+Before serving, each run's cache passes a capability probe against the
+actual child, model, and configuration: save a slot snapshot, erase the
+slot, restore from disk, and send a continuation turn. The probe only
+classifies the cache `ready` when the backend's own counter
+(`timings.cache_n`) shows the erased-then-restored slot measurably skipping
+prompt work. Erasing before the restore is what makes the evidence honest —
+reuse can come only from the snapshot, never from a still-warm slot.
+
+Because capability is decided by measurement, there is no list of supported
+architectures to maintain: whatever `llama-server` can actually save,
+restore, and reuse works, including hybrid/recurrent models (Qwen3-Next-
+style SSM hybrids and friends), and combinations where restore is
+silently a no-op are classified `unsupported` instead of pretending to be
+warm. Snapshots are keyed by a namespace hash of the model file contents
+(all shards), the llama-server binary, and state-affecting settings such
+as context size and GPU layers — never by the alias alone. Changing those
+settings yields a fresh namespace.
 
 ## Scope and boundaries
 
