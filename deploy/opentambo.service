@@ -1,3 +1,11 @@
+# Example systemd unit for a *custom* per-user layout (models on a mounted
+# disk, runtime in a nonstandard path). For the standard system-wide layout
+# do not install this file: `sudo opentambo install` generates a hardened
+# unit at /etc/systemd/system/opentambo.service automatically, and
+# `sudo opentambo uninstall` removes it. See docs/deployment.md.
+#
+# Adapt user, group, paths and the mount point before using this example.
+
 [Unit]
 Description=OpenTambo - llama.cpp process manager and persistent KV-cache proxy
 After=network-online.target
@@ -6,11 +14,11 @@ RequiresMountsFor=/srv/models
 
 [Service]
 Type=simple
-User=emil
-Group=emil
-WorkingDirectory=/home/emil
+User=tamboadmin
+Group=tamboadmin
+WorkingDirectory=/var/lib/opentambo-custom
 ExecStartPre=/usr/bin/mountpoint -q /srv/models
-ExecStart=/home/emil/.local/bin/opentambo --models /srv/models/gguf --llama-server /home/emil/llama.cpp/build/bin/llama-server --data /home/emil/.local/share/opentambo --listen 127.0.0.1:8090
+ExecStart=/usr/local/bin/opentambo --models /srv/models/gguf --llama-server /opt/llama.cpp/bin/llama-server --data /var/lib/opentambo-custom --listen 127.0.0.1:8090
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=15

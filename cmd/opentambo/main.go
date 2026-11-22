@@ -77,8 +77,31 @@ func serve(ctx context.Context, o options, stdout io.Writer) error {
 	return nil
 }
 
+// lifecycleCommand dispatches install/uninstall before any serving setup
+// or flag parsing for the server itself; uninstall in particular must work
+// with a damaged database, an absent model mount or a missing native
+// runtime. It reports whether the subcommand was handled.
+func lifecycleCommand(args []string, stdout io.Writer) (bool, error) {
+	if len(args) == 0 {
+		return false, nil
+	}
+	switch args[0] {
+	case "install":
+		return true, runInstall(args[1:], stdout)
+	case "uninstall":
+		return true, runUninstall(args[1:], stdout)
+	}
+	return false, nil
+}
+
 func main() {
 	log.SetFlags(0)
+	if handled, err := lifecycleCommand(os.Args[1:], os.Stdout); handled {
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	o, err := parseArgs(os.Args[1:], os.Getenv)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {

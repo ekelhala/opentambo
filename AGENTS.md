@@ -92,6 +92,17 @@ Full workflow and rationale: [docs/api-contracts.md](docs/api-contracts.md).
   records, never leak rows to the UI. GGUF models and KV snapshot blobs stay
   ordinary files. The binary must stay CGO-free: the pure-Go driver is the
   only SQLite implementation.
+- Privileged lifecycle (`opentambo install` / `opentambo uninstall`, issue
+  #16) lives only in `internal/lifecycle`: standard layout under
+  `/usr/local/bin`, `/etc/opentambo`, `/var/lib/opentambo` with a generated
+  systemd unit and a root-only ownership record at
+  `<etc>/opentambo/install.json`. Host effects go through the `Command`
+  seam and `Config.Prefix` staging so tests stay hermetic; paths from the
+  record are re-validated before any removal and purge never leaves the
+  managed state tree. Lifecycle dispatch in `cmd/opentambo` runs before any
+  application initialization, so uninstall works with a damaged database or
+  absent model mount. Uninstall preserves state, models and configuration
+  unless the operator passes explicit purge flags.
 - The shipped binary must stay CGO-free and generator-free: `CGO_ENABLED=0
 go build -tags ui`.
 
