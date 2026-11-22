@@ -30,6 +30,9 @@ type Record struct {
 	// CreatedModelsDir marks the model directory as installer-created;
 	// only then may --purge-models ever remove it.
 	CreatedModelsDir bool `json:"created_models_dir"`
+	// CreatedConfig marks the operator configuration file (issue #17) as
+	// installer-seeded; only then may --purge-all ever remove it.
+	CreatedConfig bool `json:"created_config,omitempty"`
 	// StateMigrated records that an operator-requested state import from a
 	// per-user installation happened (see MigrateState).
 	StateMigratedFrom string `json:"state_migrated_from,omitempty"`

@@ -43,12 +43,16 @@ func renderUnit(c Config) string {
 		mountLines = fmt.Sprintf("RequiresMountsFor=%s\n", c.MountGuard)
 		guard = fmt.Sprintf("mountpoint -q %s && ", c.MountGuard)
 	}
-	// Preflight the runtime, model tree and writable state directory
-	// before startup so a missing mount or wrong permissions is a clear
-	// unit failure instead of a manager writing beside an absent mount.
-	prestart := fmt.Sprintf("/bin/sh -c '%stest -x %s && test -d %s && test -w %s'",
-		guard, c.LlamaServer, c.ModelsDir, c.StateDir)
-	execStart := fmt.Sprintf("%s --models %s --data %s --llama-server %s --listen %s",
-		c.BinPath, c.ModelsDir, c.StateDir, c.LlamaServer, c.Listen)
+	// Preflight the operator configuration, runtime, model tree and
+	// writable state directory before startup so a missing mount or wrong
+	// permissions is a clear unit failure instead of a manager writing
+	// beside an absent mount.
+	prestart := fmt.Sprintf("/bin/sh -c '%stest -r %s && test -x %s && test -d %s && test -w %s'",
+		guard, c.ConfigPath(), c.LlamaServer, c.ModelsDir, c.StateDir)
+	// The operator configuration file (issue #17) is the single source of
+	// runtime intent: the installer seeds it with this layout, edits to it
+	// take effect on restart, and the service never rewrites it. A missing
+	// explicitly selected file fails startup loudly on purpose.
+	execStart := fmt.Sprintf("%s --config %s", c.BinPath, c.ConfigPath())
 	return fmt.Sprintf(unitTemplate, mountLines, c.User, c.Group, c.StateDir, prestart, execStart, c.StateDir)
 }

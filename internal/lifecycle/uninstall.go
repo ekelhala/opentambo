@@ -223,6 +223,18 @@ func (un *Uninstaller) removeEtc(rec Record, opts UninstallOptions) error {
 			return err
 		}
 	}
+	if opts.PurgeAll && rec.CreatedConfig && rec.EtcDir == c.EtcDir {
+		// Only a configuration file this installer seeded may be purged,
+		// and only after re-validating its recorded location.
+		path, err := seededConfigPath(rec, c)
+		if err != nil {
+			return err
+		}
+		if err = removeFileIfPresent(path); err != nil {
+			return err
+		}
+		un.logf("purged installer-seeded configuration %s", c.ConfigPath())
+	}
 	if !opts.PurgeAll {
 		un.logf("retained administrator configuration at %s", c.EtcDir)
 		return nil

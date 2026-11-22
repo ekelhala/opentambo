@@ -50,6 +50,9 @@ func (in *Installer) Install(ctx context.Context) error {
 	if err = in.prepareDirs(&rec); err != nil {
 		return err
 	}
+	if err = in.seedConfig(&rec); err != nil {
+		return err
+	}
 	if err = in.validateRuntimeAccess(ctx, &rec); err != nil {
 		return err
 	}
