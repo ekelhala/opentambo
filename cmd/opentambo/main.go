@@ -49,6 +49,13 @@ func builtinOptions() options {
 // flag the operator actually supplied always wins — parser defaults never
 // clobber the file.
 func parseArgs(args []string, getenv func(string) string) (options, *config.Effective, error) {
+	// "serve" is accepted as an explicit run subcommand and must be
+	// stripped before flag parsing: Go's parser stops at the first
+	// positional argument, which would silently discard every flag —
+	// including --config — that follows it.
+	if len(args) > 0 && args[0] == "serve" {
+		args = args[1:]
+	}
 	fs := flag.NewFlagSet("opentambo", flag.ContinueOnError)
 	f := options{}
 	fs.StringVar(&f.configPath, "config", "", "YAML configuration file (env OPENTAMBO_CONFIG, default "+config.SystemPath+" when present)")
@@ -59,6 +66,9 @@ func parseArgs(args []string, getenv func(string) string) (options, *config.Effe
 	fs.IntVar(&f.parallel, "downloads", 0, "maximum parallel downloads")
 	if err := fs.Parse(args); err != nil {
 		return options{}, nil, err
+	}
+	if extra := fs.Args(); len(extra) > 0 {
+		return options{}, nil, fmt.Errorf("unexpected argument %q", extra[0])
 	}
 	set := map[string]bool{}
 	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })

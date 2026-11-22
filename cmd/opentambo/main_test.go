@@ -60,6 +60,27 @@ func TestParseArgsRejectsUnknownFlag(t *testing.T) {
 	}
 }
 
+func TestParseArgsServeSubcommandKeepsFlags(t *testing.T) {
+	// "serve" is the explicit run subcommand: flags after it must still be
+	// parsed and the configuration file must still be discovered.
+	path := stageConfig(t, yamlWith("127.0.0.1:7311", t.TempDir()))
+	o, eff, err := parseArgs([]string{"serve", "--config", path}, func(string) string { return "" })
+	if err != nil || eff == nil || o.listen != "127.0.0.1:7311" {
+		t.Fatalf("serve must keep flags: %+v eff=%v err=%v", o, eff, err)
+	}
+	if _, _, err := parseArgs([]string{"serve", "-listen", "127.0.0.1:7312"}, func(string) string { return "" }); err != nil {
+		t.Fatalf("flags after serve must parse: %v", err)
+	}
+}
+
+func TestParseArgsRejectsStrayPositional(t *testing.T) {
+	// Silently ignoring a misspelled subcommand would start the manager on
+	// built-in defaults; it must fail loudly instead.
+	if _, _, err := parseArgs([]string{"srve"}, func(string) string { return "" }); err == nil {
+		t.Fatal("stray positional arguments must fail")
+	}
+}
+
 func TestParseArgsHelp(t *testing.T) {
 	// -h on a ContinueOnError flag set reports ErrHelp without exiting.
 	if _, _, err := parseArgs([]string{"-h"}, func(string) string { return "" }); err == nil {
