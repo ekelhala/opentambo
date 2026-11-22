@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
 func testApp(t *testing.T, binary string) *App {
@@ -296,14 +298,14 @@ func TestDeleteModelProtectsEveryRunningShard(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	register := func(model, status string) *Run {
-		run := &Run{ID: "run-" + model, Launch: Launch{Model: model, Name: "split"}, Status: status, Started: time.Now(), log: &logBuffer{}}
+	register := func(model string, status api.RunStatus) *Run {
+		run := &Run{Run: api.Run{ID: "run-" + model, Launch: Launch{Model: model, Name: "split"}, Status: status, Started: time.Now()}, log: &logBuffer{}}
 		a.mu.Lock()
 		a.runs[run.ID] = run
 		a.mu.Unlock()
 		return run
 	}
-	run := register(shardNames[0], "running")
+	run := register(shardNames[0], api.RunStatusRunning)
 	// First and secondary shards of the running quantization are protected.
 	for _, protected := range shardNames[:2] {
 		if rec := request(t, a, "DELETE", "/api/models?path="+protected, ""); rec.Code != 400 {
@@ -320,7 +322,7 @@ func TestDeleteModelProtectsEveryRunningShard(t *testing.T) {
 		}
 	}
 	// Stopped runs no longer hold their shards.
-	run.Status = "stopped"
+	run.Status = api.RunStatusStopped
 	if rec := request(t, a, "DELETE", "/api/models?path="+shardNames[1], ""); rec.Code != 200 {
 		t.Fatalf("shard protected after stop: %d %s", rec.Code, rec.Body.String())
 	}

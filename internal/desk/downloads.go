@@ -14,21 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-type Job struct {
-	ID             string    `json:"id"`
-	URL            string    `json:"url"`
-	File           string    `json:"file"`
-	Status         string    `json:"status"`
-	Bytes          int64     `json:"bytes"`
-	Total          int64     `json:"total"`
-	BytesPerSecond float64   `json:"bytes_per_second"`
-	Error          string    `json:"error,omitempty"`
-	ETag           string    `json:"etag,omitempty"`
-	Created        time.Time `json:"created"`
-	cancel         context.CancelFunc
-}
+	"github.com/ekelhala/opentambo/internal/desk/api"
+)
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
@@ -99,29 +87,25 @@ func downloadTarget(raw string) (string, error) {
 }
 
 func (a *App) addDownload(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Repo     string   `json:"repo"`
-		Files    []string `json:"files"`
-		Revision string   `json:"revision"`
-		URLs     []string `json:"urls"` // Compatibility with existing clients and saved jobs.
-	}
+	var input api.DownloadRequest
 	if err := decode(w, r, &input); err != nil {
 		fail(w, err)
 		return
 	}
+	// Urls stays supported for compatibility with existing clients and saved jobs.
 	if input.Repo != "" || len(input.Files) > 0 || input.Revision != "" {
-		if len(input.URLs) > 0 {
+		if len(input.Urls) > 0 {
 			fail(w, errors.New("provide repo and files, or URLs, not both"))
 			return
 		}
 		var err error
-		input.URLs, err = repositoryURLs(input.Repo, input.Revision, input.Files)
+		input.Urls, err = repositoryURLs(input.Repo, input.Revision, input.Files)
 		if err != nil {
 			fail(w, err)
 			return
 		}
 	}
-	if len(input.URLs) < 1 || len(input.URLs) > 32 {
+	if len(input.Urls) < 1 || len(input.Urls) > 32 {
 		fail(w, errors.New("provide a repository and at least one GGUF filename"))
 		return
 	}
@@ -129,7 +113,7 @@ func (a *App) addDownload(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	jobs := []*Job{}
 	targets := map[string]bool{}
-	for _, raw := range input.URLs {
+	for _, raw := range input.Urls {
 		raw = strings.TrimSpace(raw)
 		file, err := downloadTarget(raw)
 		if err != nil {
@@ -142,7 +126,7 @@ func (a *App) addDownload(w http.ResponseWriter, r *http.Request) {
 		}
 		targets[file] = true
 		for _, j := range a.jobs {
-			if j.File == file && j.Status != "completed" {
+			if j.File == file && j.Status != api.JobStatusCompleted {
 				fail(w, errors.New("this file already has a job; use Resume on that job"))
 				return
 			}
@@ -151,7 +135,7 @@ func (a *App) addDownload(w http.ResponseWriter, r *http.Request) {
 			fail(w, errors.New("destination already exists or cannot be inspected"))
 			return
 		}
-		jobs = append(jobs, &Job{ID: id(), URL: raw, File: file, Status: "queued", Created: time.Now()})
+		jobs = append(jobs, &Job{Job: api.Job{ID: id(), URL: raw, File: file, Status: api.JobStatusQueued, Created: time.Now()}})
 	}
 	for _, j := range jobs {
 		a.jobs[j.ID] = j
@@ -166,14 +150,14 @@ func (a *App) addDownload(w http.ResponseWriter, r *http.Request) {
 	for _, j := range jobs {
 		a.startJob(j)
 	}
-	respond(w, 202, jobs)
+	respond(w, 202, apiJobs(jobs))
 }
 
 // Caller holds a.mu; workers also acquire it before reading mutable job fields.
 func (a *App) startJob(j *Job) {
 	ctx, cancel := context.WithCancel(a.ctx)
 	j.cancel = cancel
-	j.Status = "queued"
+	j.Status = api.JobStatusQueued
 	j.Error = ""
 	j.BytesPerSecond = 0
 	a.workers.Add(1)
@@ -187,7 +171,7 @@ func (a *App) startJob(j *Job) {
 			return
 		}
 		a.mu.Lock()
-		j.Status = "downloading"
+		j.Status = api.JobStatusDownloading
 		a.mu.Unlock()
 		err := a.transfer(ctx, j)
 		a.finishJob(j, err)
@@ -200,12 +184,12 @@ func (a *App) finishJob(j *Job, err error) {
 	j.cancel = nil
 	j.BytesPerSecond = 0
 	if err == nil {
-		j.Status = "completed"
+		j.Status = api.JobStatusCompleted
 	} else if errors.Is(err, context.Canceled) {
-		j.Status = "cancelled"
+		j.Status = api.JobStatusCancelled
 		j.Error = "Paused; click Resume to continue."
 	} else {
-		j.Status = "failed"
+		j.Status = api.JobStatusFailed
 		j.Error = err.Error()
 	}
 	if saveErr := a.save(); saveErr != nil {
@@ -218,7 +202,7 @@ func (a *App) jobAction(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	j := a.jobs[r.PathValue("id")]
 	if j == nil {
-		http.NotFound(w, r)
+		jsonError(w, http.StatusNotFound, "no such download job")
 		return
 	}
 	switch r.PathValue("action") {
@@ -227,7 +211,7 @@ func (a *App) jobAction(w http.ResponseWriter, r *http.Request) {
 			j.cancel()
 		}
 	case "resume":
-		if j.cancel != nil || j.Status == "completed" {
+		if j.cancel != nil || j.Status == api.JobStatusCompleted {
 			fail(w, errors.New("only interrupted, failed or cancelled jobs can resume"))
 			return
 		}
@@ -237,10 +221,10 @@ func (a *App) jobAction(w http.ResponseWriter, r *http.Request) {
 		}
 		a.startJob(j)
 	default:
-		http.NotFound(w, r)
+		jsonError(w, http.StatusNotFound, "unknown download action")
 		return
 	}
-	respond(w, 202, map[string]bool{"accepted": true})
+	respond(w, 202, api.Accepted{Accepted: true})
 }
 
 func (a *App) transfer(ctx context.Context, j *Job) error {

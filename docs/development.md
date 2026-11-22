@@ -28,6 +28,7 @@ mockup/               design-language mockups (historical)
 | `make ui` | production build of the web UI into `internal/desk/web` |
 | `make dev` | backend on `127.0.0.1:8090` plus the Vite dev server proxying `/api` and `/v1` |
 | `make test` | `go vet ./...` and `go test -race ./...` |
+| `make generate-api` | regenerate Go and TypeScript wire types from `api/openapi.yaml` |
 | `make clean` | removes `bin/` and the web build output |
 
 Copy `.env.example` to `.env` for local overrides (e.g. `OPENTAMBO_LISTEN`
@@ -50,6 +51,15 @@ The web UI build output in `internal/desk/web` is **not committed**. The Go
 make test
 make build   # bin/opentambo with the embedded UI
 ```
+
+## API contracts
+
+The management HTTP surface (`/api/*`, `/health`, `/healthz`) is defined by
+the authoritative schema in `api/openapi.yaml`; Go and TypeScript wire types
+are generated from it with `make generate-api`. See
+[API contracts](api-contracts.md) for the ownership rule (why the OpenAI-compatible
+`/v1/*` proxy stays out of scope), the generators and how CI guards against
+drift.
 
 ## CI and releases
 

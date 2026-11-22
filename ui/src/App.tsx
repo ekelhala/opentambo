@@ -34,7 +34,12 @@ import { ServersView } from '@/views/servers'
 import { toast } from 'sonner'
 
 const EMPTY_STATE: State = {
-  settings: { models: '', binary: '', parallel_downloads: 0 },
+  settings: {
+    models: '',
+    binary: '',
+    parallel_downloads: 0,
+    prompt_cache_defaults: { enabled: false, max_bytes: 0, max_entry_bytes: 0, ttl_seconds: 0, min_reuse_tokens: 0 },
+  },
   models: [],
   catalog: [],
   jobs: [],

@@ -14,7 +14,7 @@ export function duration(seconds: number): string {
   return `${hours} h ${String(minutes % 60).padStart(2, '0')} m`
 }
 
-export function uptime(started: string, ended?: string): string {
+export function uptime(started: string, ended?: string | null): string {
   const end = ended ? new Date(ended).getTime() : Date.now()
   return duration(Math.max(0, (end - new Date(started).getTime()) / 1000))
 }

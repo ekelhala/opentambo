@@ -1,0 +1,18 @@
+# oapi-codegen configuration for the authoritative contract in api/openapi.yaml.
+# Regenerate with `make generate-api`. Do not edit the output by hand.
+package: api
+output: internal/desk/api/gen.go
+generate:
+  models: true
+output-options:
+  # v2.8+ emits `,omitempty` for every non-required property by default, which
+  # matches the handwritten wire structs these generated types replace.
+  # Optional fields stay value-typed (absence is already represented by
+  # omitempty); the few fields where JSON null is a real value
+  # (Run.ended, Run.cache, Launch.prompt_cache) opt back into pointers with
+  # x-go-type-skip-optional-pointer: false in the specification.
+  prefer-skip-optional-pointer: true
+  # Keep Go identifiers idiomatic and stable against the pre-generation code
+  # (Id → ID, Url → URL, Etag → ETag, TtlSeconds → TTLSeconds, and so on).
+  name-normalizer: ToCamelCaseWithInitialisms
+  additional-initialisms: [ID, URL, ETag, TTL, GPU, PID, HTTP]

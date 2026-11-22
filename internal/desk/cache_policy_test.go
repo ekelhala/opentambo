@@ -212,7 +212,7 @@ func TestCacheListingReportsPersistedBudget(t *testing.T) {
 	}
 }
 
-func normalizedSpec(spec PromptCache) PromptCache { return spec.normalized() }
+func normalizedSpec(spec PromptCache) PromptCache { return normalizedPromptCache(spec) }
 
 // The saved launch profile must round-trip the full advanced prompt-cache
 // policy so "Run again" reuses the real limits, not defaults.

@@ -15,7 +15,7 @@ import { bytes } from '@/lib/format'
 // automatic recovery, so the panel names the failure and the manual
 // recovery action instead of reassuring.
 
-export function CacheBadge({ cache }: { cache?: CacheView }) {
+export function CacheBadge({ cache }: { cache?: CacheView | null }) {
   if (!cache?.requested) return null
   switch (cache.status) {
     case 'ready':

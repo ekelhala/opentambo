@@ -3,6 +3,7 @@ package desk
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,32 +16,15 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
-type Launch struct {
-	Name        string            `json:"name"`
-	Model       string            `json:"model"`
-	Context     int               `json:"context"`
-	GPULayers   int               `json:"gpu_layers"`
-	Port        int               `json:"port"`
-	Args        []string          `json:"args"`
-	Env         map[string]string `json:"env"`
-	PromptCache *PromptCache      `json:"prompt_cache,omitempty"`
-}
-type Run struct {
-	ID      string     `json:"id"`
-	Launch  Launch     `json:"launch"`
-	Command []string   `json:"command"`
-	PID     int        `json:"pid"`
-	Status  string     `json:"status"`
-	Started time.Time  `json:"started"`
-	Ended   *time.Time `json:"ended,omitempty"`
-	Error   string     `json:"error,omitempty"`
-	stop    context.CancelFunc
-	ctx     context.Context
-	log     *logBuffer
-	cache   *RunCache
-}
+// Launch and Run are the generated transport records; the Run wrapper adds
+// manager-only state (stop hook, context, log buffer, cache coordinator)
+// that is never serialized.
+type Launch = api.Launch
+
 type logBuffer struct {
 	mu   sync.Mutex
 	data []byte
@@ -58,12 +42,20 @@ func (b *logBuffer) Write(p []byte) (int, error) {
 func (b *logBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return string(b.data) }
 
 func (a *App) launch(w http.ResponseWriter, r *http.Request) {
-	var spec Launch
+	var spec api.Launch
 	if err := decode(w, r, &spec); err != nil {
 		fail(w, err)
 		return
 	}
-	if err := spec.PromptCache.validate(); err != nil {
+	// The contract always presents args/env as present collections; absent
+	// client values normalize to empty rather than null on every round trip.
+	if spec.Args == nil {
+		spec.Args = []string{}
+	}
+	if spec.Env == nil {
+		spec.Env = map[string]string{}
+	}
+	if err := validatePromptCache(spec.PromptCache); err != nil {
 		fail(w, err)
 		return
 	}
@@ -100,11 +92,11 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, run := range a.runs {
-		if (run.Status == "running" || run.Status == "stopping") && run.Launch.Port == spec.Port {
+		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Port == spec.Port {
 			fail(w, errors.New("that port is already used by a managed server"))
 			return
 		}
-		if (run.Status == "running" || run.Status == "stopping") && run.Launch.Name == spec.Name {
+		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Name == spec.Name {
 			fail(w, errors.New("that model name is already used by a managed server"))
 			return
 		}
@@ -167,7 +159,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		cmd.Env = append(cmd.Env, k+"="+env[k])
 	}
-	run := &Run{ID: id(), Launch: spec, Command: append([]string{binaryPath}, args...), Status: "running", Started: time.Now(), stop: stop, ctx: ctx, log: &logBuffer{}}
+	run := &Run{Run: api.Run{ID: id(), Launch: spec, Command: append([]string{binaryPath}, args...), Status: api.RunStatusRunning, Started: time.Now()}, stop: stop, ctx: ctx, log: &logBuffer{}}
 	if cachePrep != nil {
 		run.cache = newRunCache(cachePrep.spec, cachePrep.namespace, newLlamaClient(spec.Port, a.cacheClient), cachePrep.store)
 	}
@@ -216,15 +208,15 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		defer a.mu.Unlock()
 		now := time.Now()
 		run.Ended = &now
-		run.Status = "stopped"
+		run.Status = api.RunStatusStopped
 		run.stop = nil
 		if err != nil && ctx.Err() == nil {
-			run.Status = "failed"
+			run.Status = api.RunStatusFailed
 			run.Error = err.Error()
 		}
 		stop()
 	}()
-	respond(w, 201, run)
+	respond(w, 201, run.Run)
 }
 
 func (a *App) stopRun(w http.ResponseWriter, r *http.Request) {
@@ -232,45 +224,49 @@ func (a *App) stopRun(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	run := a.runs[r.PathValue("id")]
 	if run == nil {
-		http.NotFound(w, r)
+		jsonError(w, http.StatusNotFound, "no such run")
 		return
 	}
 	if run.stop != nil {
-		run.Status = "stopping"
+		run.Status = api.RunStatusStopping
 		run.stop()
 	}
-	respond(w, 202, map[string]bool{"accepted": true})
+	respond(w, 202, api.Accepted{Accepted: true})
 }
 func (a *App) logs(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	run := a.runs[r.PathValue("id")]
 	a.mu.Unlock()
 	if run == nil {
-		http.NotFound(w, r)
+		jsonError(w, http.StatusNotFound, "no such run")
 		return
 	}
-	respond(w, 200, map[string]string{"logs": run.log.String()})
+	respond(w, 200, api.Logs{Logs: run.log.String()})
 }
 func (a *App) health(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	run := a.runs[r.PathValue("id")]
 	if run == nil {
 		a.mu.Unlock()
-		http.NotFound(w, r)
+		jsonError(w, http.StatusNotFound, "no such run")
 		return
 	}
 	port, status := run.Launch.Port, run.Status
 	a.mu.Unlock()
-	if status != "running" {
-		respond(w, 200, map[string]string{"status": status})
+	if status != api.RunStatusRunning {
+		respond(w, 200, api.RunHealth{Status: api.RunHealthStatus(status)})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 1500*time.Millisecond)
 	defer cancel()
 	code, body, err := getJSON(a.client, ctx, fmt.Sprintf("http://127.0.0.1:%d/health", port))
 	if err != nil {
-		respond(w, 200, map[string]string{"status": "unreachable", "detail": err.Error()})
+		respond(w, 200, api.RunHealth{Status: api.RunHealthStatusUnreachable, Detail: err.Error()})
 		return
 	}
-	respond(w, 200, map[string]any{"http_status": code, "response": body})
+	var response map[string]any
+	if err = json.Unmarshal(body, &response); err != nil {
+		response = map[string]any{}
+	}
+	respond(w, 200, api.RunHealth{HTTPStatus: code, Response: response})
 }

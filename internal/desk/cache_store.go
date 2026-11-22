@@ -25,6 +25,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
 const cacheIndexVersion = 1
@@ -621,17 +623,10 @@ func (s *cacheStore) HasEntry(entryID string) bool {
 	return s.entries[entryID] != nil
 }
 
-// PublicCacheEntry is the sanitized management view of an entry: token IDs
-// and server-side filenames stay private.
-type PublicCacheEntry struct {
-	ID           string    `json:"id"`
-	Namespace    string    `json:"namespace"`
-	SavedTokens  int       `json:"saved_tokens"`
-	PrefixTokens int       `json:"prefix_tokens"` // count only; the IDs are private
-	Bytes        int64     `json:"bytes"`
-	CreatedAt    time.Time `json:"created_at"`
-	LastUsedAt   time.Time `json:"last_used_at"`
-}
+// PublicCacheEntry is the sanitized management view of an entry; it is the
+// generated CacheEntry record from api/openapi.yaml (token IDs and
+// server-side filenames stay private).
+type PublicCacheEntry = api.CacheEntry
 
 // Summary returns sanitized entry metadata (token IDs are never exposed)
 // with usage accounting for the management API.
