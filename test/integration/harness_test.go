@@ -34,9 +34,13 @@ const (
 	llamaSHA256  = "5c1bf73c8c338d7934bbe7b43827496685f69b2e2afce2de9c536f755dd94a20"
 	llamaURL     = "https://github.com/ggml-org/llama.cpp/releases/download/" + llamaRelease + "/" + llamaAsset
 
-	// modelRelPath is the GGUF shipped in this repository's model shelf;
-	// full-attention llama architecture, small enough for CPU CI.
+	// modelRelPath is the GGUF taken from this repository's model shelf
+	// when present; full-attention llama architecture, small enough for CPU
+	// CI. Fresh checkouts carry no weights, so the same pinned quantization
+	// is fetched from Hugging Face and verified against modelSHA256.
 	modelRelPath = "unsloth/SmolLM2-135M-Instruct-GGUF/main/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+	modelURL     = "https://huggingface.co/unsloth/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+	modelSHA256  = "ed5fa30c487b282ec156c29062f1222e5c20875a944ac98289dbd242e947f747"
 )
 
 var (
@@ -153,10 +157,45 @@ func mergeCoverage() error {
 	return nil
 }
 
-func prepareModelShelf() (string, error) {
+// fixtureCacheDir returns the shared on-disk cache for downloaded fixtures,
+// overridable with OPENTAMBO_FIXTURE_CACHE.
+func fixtureCacheDir() string {
+	if cache := os.Getenv("OPENTAMBO_FIXTURE_CACHE"); cache != "" {
+		return cache
+	}
+	return filepath.Join(os.TempDir(), "opentambo-fixtures")
+}
+
+// modelFixturePath returns the pinned GGUF for the suite: the repository's
+// model shelf when it carries the file, otherwise a fixture-cache copy
+// fetched from Hugging Face and verified against the pinned SHA-256. Fresh
+// CI checkouts hold no model weights, so the harness provisions its own
+// identical file; failures are fatal, never skipped.
+func modelFixturePath() (string, error) {
 	source := filepath.Join(repoRoot, "models", filepath.FromSlash(modelRelPath))
-	if _, err := os.Stat(source); err != nil {
-		return "", fmt.Errorf("model fixture %s is required (no skipping): %w", modelRelPath, err)
+	if _, err := os.Stat(source); err == nil {
+		return source, nil
+	}
+	target := filepath.Join(fixtureCacheDir(), "models", filepath.FromSlash(modelRelPath))
+	if !fileHasSHA(target, modelSHA256) {
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return "", err
+		}
+		fmt.Printf("integration harness: fetching pinned model fixture %s\n", modelURL)
+		if err := downloadFile(modelURL, target); err != nil {
+			return "", fmt.Errorf("model fixture %s is required (no skipping): %w", modelRelPath, err)
+		}
+		if !fileHasSHA(target, modelSHA256) {
+			return "", fmt.Errorf("downloaded model fixture does not match the pinned SHA-256 %s", modelSHA256)
+		}
+	}
+	return target, nil
+}
+
+func prepareModelShelf() (string, error) {
+	source, err := modelFixturePath()
+	if err != nil {
+		return "", err
 	}
 	shelf, err := os.MkdirTemp("", "opentambo-integration-models-*")
 	if err != nil {
@@ -185,10 +224,7 @@ func prepareModelShelf() (string, error) {
 // replaced, never trusted; failures are fatal, never skipped.
 func ensureLlamaServer(t *testing.T) string {
 	t.Helper()
-	cache := os.Getenv("OPENTAMBO_FIXTURE_CACHE")
-	if cache == "" {
-		cache = filepath.Join(os.TempDir(), "opentambo-fixtures")
-	}
+	cache := fixtureCacheDir()
 	dir := filepath.Join(cache, "llama-"+llamaRelease)
 	marker := filepath.Join(dir, ".pinned-sha256")
 	if binary := findFixtureBinary(dir); binary != "" && executable(binary) {
@@ -249,6 +285,10 @@ func findFixtureBinary(dir string) string {
 }
 
 func fileMatchesSHA(path string) bool {
+	return fileHasSHA(path, llamaSHA256)
+}
+
+func fileHasSHA(path, want string) bool {
 	file, err := os.Open(path)
 	if err != nil {
 		return false
@@ -258,26 +298,31 @@ func fileMatchesSHA(path string) bool {
 	if _, err := io.Copy(hash, file); err != nil {
 		return false
 	}
-	return hex.EncodeToString(hash.Sum(nil)) == llamaSHA256
+	return hex.EncodeToString(hash.Sum(nil)) == want
+}
+
+func downloadFile(url, dest string) error {
+	response, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", response.StatusCode)
+	}
+	file, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = io.Copy(file, response.Body)
+	return err
 }
 
 func download(t *testing.T, url, dest string) {
 	t.Helper()
 	t.Logf("downloading %s", url)
-	response, err := http.Get(url)
-	if err != nil {
-		t.Fatalf("downloading fixture: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("downloading fixture: HTTP %d", response.StatusCode)
-	}
-	file, err := os.Create(dest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	if _, err := io.Copy(file, response.Body); err != nil {
+	if err := downloadFile(url, dest); err != nil {
 		t.Fatalf("downloading fixture: %v", err)
 	}
 }
