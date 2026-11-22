@@ -41,7 +41,28 @@ const (
 	modelRelPath = "unsloth/SmolLM2-135M-Instruct-GGUF/main/SmolLM2-135M-Instruct-Q4_K_M.gguf"
 	modelURL     = "https://huggingface.co/unsloth/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf"
 	modelSHA256  = "ed5fa30c487b282ec156c29062f1222e5c20875a944ac98289dbd242e947f747"
+
+	// hybridModelRelPath pins a hybrid-architecture fixture (LFM2 mixes
+	// causal-convolution recurrent layers with attention). It is the
+	// smallest GGUF llama.cpp supports that exercises the recurrent-memory
+	// save/restore path, so the hybrid prompt-cache scenarios run on CPU CI
+	// exactly like the full-attention ones.
+	hybridModelRelPath = "LiquidAI/LFM2-1.2B-GGUF/main/LFM2-1.2B-Q4_K_M.gguf"
+	hybridModelURL     = "https://huggingface.co/LiquidAI/LFM2-1.2B-GGUF/resolve/main/LFM2-1.2B-Q4_K_M.gguf"
+	hybridModelSHA256  = "55175400e3f509a9616227afeffd58d87e80b9f628a5d3d54ada884d85221fed"
 )
+
+// shelfFixture names one pinned GGUF that prepareModelShelf provisions.
+type shelfFixture struct {
+	relPath string
+	url     string
+	sha256  string
+}
+
+var shelfFixtures = []shelfFixture{
+	{modelRelPath, modelURL, modelSHA256},
+	{hybridModelRelPath, hybridModelURL, hybridModelSHA256},
+}
 
 var (
 	repoRoot     string
@@ -166,57 +187,69 @@ func fixtureCacheDir() string {
 	return filepath.Join(os.TempDir(), "opentambo-fixtures")
 }
 
-// modelFixturePath returns the pinned GGUF for the suite: the repository's
-// model shelf when it carries the file, otherwise a fixture-cache copy
-// fetched from Hugging Face and verified against the pinned SHA-256. Fresh
+// fixturePath returns the pinned GGUF for one shelf fixture: the
+// repository's model shelf when it carries the file, otherwise a fixture-cache
+// copy fetched from Hugging Face and verified against the pinned SHA-256. Fresh
 // CI checkouts hold no model weights, so the harness provisions its own
 // identical file; failures are fatal, never skipped.
-func modelFixturePath() (string, error) {
-	source := filepath.Join(repoRoot, "models", filepath.FromSlash(modelRelPath))
+func (f shelfFixture) fixturePath() (string, error) {
+	source := filepath.Join(repoRoot, "models", filepath.FromSlash(f.relPath))
 	if _, err := os.Stat(source); err == nil {
 		return source, nil
 	}
-	target := filepath.Join(fixtureCacheDir(), "models", filepath.FromSlash(modelRelPath))
-	if !fileHasSHA(target, modelSHA256) {
+	target := filepath.Join(fixtureCacheDir(), "models", filepath.FromSlash(f.relPath))
+	if !fileHasSHA(target, f.sha256) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return "", err
 		}
-		fmt.Printf("integration harness: fetching pinned model fixture %s\n", modelURL)
-		if err := downloadFile(modelURL, target); err != nil {
-			return "", fmt.Errorf("model fixture %s is required (no skipping): %w", modelRelPath, err)
+		fmt.Printf("integration harness: fetching pinned model fixture %s\n", f.url)
+		if err := downloadFile(f.url, target); err != nil {
+			return "", fmt.Errorf("model fixture %s is required (no skipping): %w", f.relPath, err)
 		}
-		if !fileHasSHA(target, modelSHA256) {
-			return "", fmt.Errorf("downloaded model fixture does not match the pinned SHA-256 %s", modelSHA256)
+		if !fileHasSHA(target, f.sha256) {
+			return "", fmt.Errorf("downloaded model fixture does not match the pinned SHA-256 %s", f.sha256)
 		}
 	}
 	return target, nil
 }
 
 func prepareModelShelf() (string, error) {
-	source, err := modelFixturePath()
-	if err != nil {
-		return "", err
-	}
 	shelf, err := os.MkdirTemp("", "opentambo-integration-models-*")
 	if err != nil {
 		return "", err
 	}
-	target := filepath.Join(shelf, filepath.FromSlash(modelRelPath))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return "", err
+	for _, fixture := range shelfFixtures {
+		source, err := fixture.fixturePath()
+		if err != nil {
+			return "", err
+		}
+		target := filepath.Join(shelf, filepath.FromSlash(fixture.relPath))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return "", err
+		}
+		input, err := os.Open(source)
+		if err != nil {
+			return "", err
+		}
+		output, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+		if err != nil {
+			input.Close()
+			return "", err
+		}
+		_, copyErr := io.Copy(output, input)
+		closeIn := input.Close()
+		closeOut := output.Close()
+		if copyErr != nil {
+			return "", copyErr
+		}
+		if closeIn != nil {
+			return "", closeIn
+		}
+		if closeOut != nil {
+			return "", closeOut
+		}
 	}
-	input, err := os.Open(source)
-	if err != nil {
-		return "", err
-	}
-	defer input.Close()
-	output, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
-	if err != nil {
-		return "", err
-	}
-	defer output.Close()
-	_, err = io.Copy(output, input)
-	return shelf, err
+	return shelf, nil
 }
 
 // ensureLlamaServer returns an executable pinned llama-server, downloading
