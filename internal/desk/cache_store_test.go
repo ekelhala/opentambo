@@ -1,13 +1,49 @@
 package desk
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	storedb "github.com/ekelhala/opentambo/internal/desk/store"
 )
+
+var (
+	cacheTestDBMu  sync.Mutex
+	cacheTestDBMap = map[string]*sql.DB{}
+)
+
+// cacheTestDB returns the SQLite database shared by every cache store opened
+// inside one test: reopening a namespace must see the rows its predecessor
+// committed, exactly like two App lifetimes sharing <data>/opentambo.db.
+func cacheTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	cacheTestDBMu.Lock()
+	defer cacheTestDBMu.Unlock()
+	if db, ok := cacheTestDBMap[t.Name()]; ok {
+		return db
+	}
+	db, err := storedb.Open(filepath.Join(t.TempDir(), storedb.DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = storedb.Migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cacheTestDBMu.Lock()
+		defer cacheTestDBMu.Unlock()
+		delete(cacheTestDBMap, t.Name())
+		_ = db.Close()
+	})
+	cacheTestDBMap[t.Name()] = db
+	return db
+}
 
 // writeSnapshot mimics llama-server writing a slot snapshot through the
 // --slot-save-path the manager handed it.
@@ -20,7 +56,7 @@ func writeSnapshot(t *testing.T, storeDir, entryID string, content []byte) {
 
 func TestStorePublishAndReload(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,14 +74,19 @@ func TestStorePublishAndReload(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(store.dir, "aaaa.tmp")); !os.IsNotExist(err) {
 		t.Fatal("temp file survived publication")
 	}
-	info, err := os.Stat(filepath.Join(store.dir, "index.json"))
+	// Metadata is durable as a committed database row; no index.json file
+	// is written next to the snapshots anymore.
+	if _, err = os.Stat(filepath.Join(store.dir, "index.json")); !os.IsNotExist(err) {
+		t.Fatalf("index.json must no longer be the durable format (stat err %v)", err)
+	}
+	rows, err := storedb.Snapshots(cacheTestDB(t), store.dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0600 {
-		t.Fatalf("index permissions: %v", info.Mode().Perm())
+	if len(rows) != 1 || rows[0].ID != "aaaa" || rows[0].State != storedb.SnapshotCommitted {
+		t.Fatalf("published entry not committed to the database: %+v (%v)", rows, err)
 	}
-	reopened, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	reopened, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +101,7 @@ func TestStorePublishAndReload(t *testing.T) {
 
 func TestStorePublishRejectsOversizedAndMissing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 4, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 4, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +122,7 @@ func TestStorePublishRejectsOversizedAndMissing(t *testing.T) {
 
 func TestStoreQuotaEvictsLeastRecentlyUsed(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 25, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 25, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +152,7 @@ func TestStoreQuotaEvictsLeastRecentlyUsed(t *testing.T) {
 
 func TestStoreTouchChangesEvictionOrder(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 25, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 25, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +169,7 @@ func TestStoreTouchChangesEvictionOrder(t *testing.T) {
 	publish("first")
 	publish("second")
 	store.Touch("first")
-	reopened, err := newCacheStore(dir, "ns", 25, 1<<19, 0)
+	reopened, err := newCacheStore(cacheTestDB(t), dir, "ns", 25, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +186,7 @@ func TestStoreTouchChangesEvictionOrder(t *testing.T) {
 
 func TestStoreTTLPrunes(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 60*time.Second)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 60*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +210,7 @@ func TestStoreTTLPrunes(t *testing.T) {
 
 func TestStorePinBlocksDeleteAndEviction(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 25, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 25, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +252,7 @@ func TestStoreRecoveryDropsOrphansAndMissingFiles(t *testing.T) {
 	}}
 	contents, _ := json.Marshal(index)
 	_ = os.WriteFile(filepath.Join(dir, "index.json"), contents, 0600)
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,18 +264,21 @@ func TestStoreRecoveryDropsOrphansAndMissingFiles(t *testing.T) {
 			t.Fatalf("%s survived recovery", name)
 		}
 	}
-	committed, err := os.ReadFile(filepath.Join(dir, "index.json"))
-	if err != nil {
-		t.Fatal(err)
+	// The legacy index is imported once, ghost included; recovery drops the
+	// entry whose file vanished and keeps the original file aside, never
+	// deletes it outright.
+	if _, err = os.Stat(filepath.Join(dir, "index.json.migrated")); err != nil {
+		t.Fatalf("legacy index not kept aside after import: %v", err)
 	}
-	if strings.Contains(string(committed), "ghost") {
-		t.Fatal("dropped entry still referenced in the index")
+	rows, err := storedb.SnapshotsInDir(cacheTestDB(t), store.dir)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("dropped entry still referenced in the database: %+v (%v)", rows, err)
 	}
 }
 
 func TestStoreChecksumMismatchInvalidatesEntry(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +296,7 @@ func TestStoreChecksumMismatchInvalidatesEntry(t *testing.T) {
 	if store.HasEntry("tampered") {
 		t.Fatal("corrupted entry survived")
 	}
-	reopened, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	reopened, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +307,7 @@ func TestStoreChecksumMismatchInvalidatesEntry(t *testing.T) {
 
 func TestStoreSummaryIsSanitized(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +337,7 @@ func TestStoreSummaryIsSanitized(t *testing.T) {
 
 func TestStoreRemoveTempValidation(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +358,7 @@ func TestStoreRemoveTempValidation(t *testing.T) {
 
 func TestStoreTTLPruneHonorsInFlightPins(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, time.Minute)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +393,7 @@ func TestStoreTTLPruneHonorsInFlightPins(t *testing.T) {
 
 func TestStoreInvalidFileCleanupHonorsPins(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +436,7 @@ func TestStoreInvalidFileCleanupHonorsPins(t *testing.T) {
 
 func TestStoreInvalidCleanupWaitsForFinalPin(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +479,7 @@ func TestStoreInvalidCleanupWaitsForFinalPin(t *testing.T) {
 
 func TestStoreChecksumInvalidationHonorsPins(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,7 +522,7 @@ func TestStoreChecksumInvalidationHonorsPins(t *testing.T) {
 	if _, err = os.Stat(filepath.Join(store.dir, "tampered.bin")); !os.IsNotExist(err) {
 		t.Fatal("checksum-invalid snapshot file left behind after Done")
 	}
-	reopened, err := newCacheStore(dir, "ns", 1<<20, 1<<19, 0)
+	reopened, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +533,7 @@ func TestStoreChecksumInvalidationHonorsPins(t *testing.T) {
 
 func TestStoreExpiryIsEnforcedAtLookup(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "ns")
-	store, err := newCacheStore(dir, "ns", 1<<20, 1<<19, time.Minute)
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

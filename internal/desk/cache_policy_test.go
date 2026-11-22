@@ -1,11 +1,14 @@
 package desk
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	storedb "github.com/ekelhala/opentambo/internal/desk/store"
 )
 
 // appOnData starts a manager over an existing data directory (simulating a
@@ -20,27 +23,33 @@ func appOnData(t *testing.T, models, data string) *App {
 	return a
 }
 
-// ageIndexEntries rewrites the committed index so every entry looks as if it
-// was last used `age` ago (simulating snapshots from an older run).
-func ageIndexEntries(t *testing.T, dir string, age time.Duration) {
+// ageIndexEntries rewrites the committed snapshot rows so every entry looks
+// as if it was last used `age` ago (simulating snapshots from an older run).
+func ageIndexEntries(t *testing.T, db *sql.DB, dir string, age time.Duration) {
 	t.Helper()
-	contents, err := os.ReadFile(filepath.Join(dir, "index.json"))
+	rows, err := storedb.Snapshots(db, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var index cacheIndex
-	if err = json.Unmarshal(contents, &index); err != nil {
+	for i := range rows {
+		rows[i].CreatedAt = rows[i].CreatedAt.Add(-age)
+		rows[i].LastUsedAt = rows[i].LastUsedAt.Add(-age)
+	}
+	if err = storedb.ReplaceSnapshots(db, dir, rows); err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range index.Entries {
-		e.CreatedAt = e.CreatedAt.Add(-age)
-		e.LastUsedAt = e.LastUsedAt.Add(-age)
+}
+
+// forgetNamespacePolicy drops the persisted-policy flag from a namespace
+// row, simulating a directory written before policies were persisted.
+func forgetNamespacePolicy(t *testing.T, a *App, dir string) {
+	t.Helper()
+	ns, ok, err := storedb.Namespace(a.db, dir)
+	if err != nil || !ok {
+		t.Fatalf("namespace row missing after launch (ok %v, err %v)", ok, err)
 	}
-	out, err := json.Marshal(index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = os.WriteFile(filepath.Join(dir, "index.json"), out, 0600); err != nil {
+	ns.HasPolicy = false
+	if err = storedb.SaveNamespace(a.db, ns); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -90,30 +99,19 @@ func TestCacheStoreForAppliesPolicyOnReuse(t *testing.T) {
 func TestCachePolicyPersistedToNamespaceDirectory(t *testing.T) {
 	a := testApp(t, "missing-llama-server")
 	dir := filepath.Join(a.data, "prompt-cache", "ns")
-	if _, err := a.cacheStoreFor(dir, "ns", normalizedSpec(PromptCache{Enabled: true, MaxBytes: 1 << 20, MaxEntryBytes: 1 << 19, TTLSeconds: 3600})); err != nil {
-		t.Fatal(err)
-	}
-	contents, err := os.ReadFile(filepath.Join(dir, "policy.json"))
-	if err != nil {
-		t.Fatal("namespace policy was not persisted:", err)
-	}
-	var persisted struct {
-		MaxBytes      int64 `json:"max_bytes"`
-		MaxEntryBytes int64 `json:"max_entry_bytes"`
-		TTLSeconds    int64 `json:"ttl_seconds"`
-	}
-	if err = json.Unmarshal(contents, &persisted); err != nil {
-		t.Fatal(err)
-	}
-	if persisted.MaxBytes != 1<<20 || persisted.MaxEntryBytes != 1<<19 || persisted.TTLSeconds != 3600 {
-		t.Fatalf("persisted policy does not match the launch spec: %s", contents)
-	}
-	info, err := os.Stat(filepath.Join(dir, "policy.json"))
+	opened, err := a.cacheStoreFor(dir, "ns", normalizedSpec(PromptCache{Enabled: true, MaxBytes: 1 << 20, MaxEntryBytes: 1 << 19, TTLSeconds: 3600}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0600 {
-		t.Fatalf("policy permissions: %v", info.Mode().Perm())
+	ns, ok, err := storedb.Namespace(a.db, opened.dir)
+	if err != nil || !ok {
+		t.Fatalf("namespace policy was not persisted (ok %v, err %v)", ok, err)
+	}
+	if !ns.HasPolicy || ns.MaxBytes != 1<<20 || ns.MaxEntryBytes != 1<<19 || ns.TTLSeconds != 3600 {
+		t.Fatalf("persisted policy does not match the launch spec: %+v", ns)
+	}
+	if _, err = os.Stat(filepath.Join(opened.dir, "policy.json")); !os.IsNotExist(err) {
+		t.Fatalf("policy.json must no longer be the durable format (stat err %v)", err)
 	}
 }
 
@@ -135,7 +133,7 @@ func TestCacheListingHonorsPersistedPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ageIndexEntries(t, store.dir, 10*24*time.Hour)
+	ageIndexEntries(t, a.db, store.dir, 10*24*time.Hour)
 	a.Close()
 
 	relaunched := appOnData(t, base, data)
@@ -170,11 +168,9 @@ func TestCacheListingNeverPrunesUnderDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a namespace directory written by an older release: no policy file.
-	if err = os.Remove(filepath.Join(dir, "policy.json")); err != nil {
-		t.Fatal(err)
-	}
-	ageIndexEntries(t, store.dir, 10*24*time.Hour)
+	// Simulate a namespace written before policies were persisted.
+	forgetNamespacePolicy(t, a, store.dir)
+	ageIndexEntries(t, a.db, store.dir, 10*24*time.Hour)
 	a.Close()
 
 	relaunched := appOnData(t, base, data)

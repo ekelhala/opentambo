@@ -3,10 +3,10 @@ package desk
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -46,6 +46,7 @@ type Run struct {
 type App struct {
 	mu                   sync.Mutex
 	models, binary, data string
+	db                   *sql.DB
 	jobs                 map[string]*Job
 	runs                 map[string]*Run
 	profiles             map[string]Launch
@@ -58,10 +59,6 @@ type App struct {
 	client               *http.Client
 	proxyTransport       *http.Transport
 	cacheClient          *http.Client
-}
-type savedState struct {
-	Jobs     map[string]*Job   `json:"jobs"`
-	Profiles map[string]Launch `json:"profiles"`
 }
 
 func New(models, binary, data string, parallel int) (*App, error) {
@@ -92,26 +89,7 @@ func New(models, binary, data string, parallel int) (*App, error) {
 	// Control-plane calls to children (slot save/restore) can legitimately
 	// take a while on large KV caches; they never go through a proxy.
 	a.cacheClient = &http.Client{Transport: &http.Transport{Proxy: nil, ResponseHeaderTimeout: 5 * time.Minute}}
-	contents, err := os.ReadFile(filepath.Join(data, "state.json"))
-	if err == nil {
-		var state savedState
-		if err = json.Unmarshal(contents, &state); err != nil {
-			cancel()
-			return nil, fmt.Errorf("read state: %w", err)
-		}
-		if state.Jobs != nil {
-			a.jobs = state.Jobs
-		}
-		if state.Profiles != nil {
-			a.profiles = state.Profiles
-		}
-		for _, job := range a.jobs {
-			if job.Status == api.JobStatusDownloading || job.Status == api.JobStatusQueued {
-				job.Status = api.JobStatusInterrupted
-				job.Error = "Service stopped; click Resume to continue."
-			}
-		}
-	} else if !os.IsNotExist(err) {
+	if err = a.openDurable(); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -130,20 +108,17 @@ func (a *App) Close() {
 		a.mu.Unlock()
 		a.workers.Wait()
 		a.proxyTransport.CloseIdleConnections()
+		if a.db != nil {
+			_ = a.db.Close()
+		}
 	})
 }
 
-// Caller holds a.mu. State contains user-supplied environment values: keep it private.
-func (a *App) save() error {
-	b, err := json.MarshalIndent(savedState{a.jobs, a.profiles}, "", "  ")
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(a.data, "state.json")
-	if err = os.WriteFile(path+".tmp", b, 0600); err != nil {
-		return err
-	}
-	return os.Rename(path+".tmp", path)
+// savedState is the legacy pre-SQLite on-disk shape, kept only so the one
+// time import (persistence.go) can decode an existing state.json.
+type savedState struct {
+	Jobs     map[string]*Job   `json:"jobs"`
+	Profiles map[string]Launch `json:"profiles"`
 }
 
 func id() string {

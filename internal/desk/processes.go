@@ -176,6 +176,11 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	if err = a.save(); err != nil {
 		run.Error = "Launch settings could not be saved: " + err.Error()
 	}
+	if err = a.recordRunLocked(run); err != nil && run.Error == "" {
+		// History is bookkeeping beside a launch that already succeeded;
+		// startup reconciliation of live rows is the backstop.
+		run.Error = "Run history could not be saved: " + err.Error()
+	}
 	if run.cache != nil {
 		a.workers.Add(1)
 		readyContext := ctx
@@ -214,6 +219,10 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 			run.Status = api.RunStatusFailed
 			run.Error = err.Error()
 		}
+		// Persist the terminal history row (no longer live). A failure here
+		// cannot change the process outcome; startup demotion of live rows
+		// remains the backstop.
+		_ = a.recordRunLocked(run)
 		stop()
 	}()
 	respond(w, 201, run.Run)

@@ -32,6 +32,14 @@ source-line coverage; the annotated per-line view is `coverage.html`.
   the denominator even when a particular run does not execute it.
   `scripts/go-coverage.sh` cross-checks the package set: a built package with
   handwritten statements that produces no profile blocks fails the gate.
+- That same flag makes every test binary record every instrumented block, so
+  the raw `coverage.out` repeats each block once per test binary. The gate
+  canonicalizes it first (`coverage.merged.out`): one record per block,
+  covered when **any** test binary executed it. Measuring the raw file
+  directly would dilute every percentage by the number of test binaries, and
+  the dilution factor changes whenever a package is added — floors are
+  therefore calibrated on the canonical profile (issue #15 fixed this; the
+  ratchet was recalibrated upward in the same change, never lowered).
 - Exclusions exist only as documented rules, never as silence:
   - `internal/desk/api` — generated wire types (regenerated from
     `api/openapi.yaml`, covered by the contract conformance tests).

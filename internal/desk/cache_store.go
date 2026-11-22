@@ -1,18 +1,22 @@
 package desk
 
 // Namespaced disk store for prompt snapshots. Snapshots live below
-// <data>/prompt-cache/<namespace>/ with private permissions. Metadata is a
-// single JSON index committed atomically (temp file, fsync, rename). Files
-// are content-verified with SHA-256 before restore. Token IDs describe
-// private conversation content: the index file is 0600, entries are never
-// logged, and raw snapshots are never served through the API.
+// <data>/prompt-cache/<namespace>/ with private permissions. Durable
+// metadata (retained policy, snapshot checksums, verified token prefixes
+// and accounting) lives in the embedded SQLite database; blob files stay
+// on disk and the database holds their committed rows, rewritten as one
+// atomic transaction per mutation. Files are content-verified with SHA-256
+// before restore. Token IDs describe private conversation content: the
+// database is 0600, entries are never logged, and raw snapshots are never
+// served through the API.
 //
 // Mutations follow one pattern: take the in-process mutex, take the
-// cross-process flock, reload the committed index, apply the change, commit,
+// cross-process flock, reload the committed rows, apply the change, commit,
 // unlock. Crash recovery drops interrupted publications and orphan files.
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,13 +31,14 @@ import (
 	"time"
 
 	"github.com/ekelhala/opentambo/internal/desk/api"
+	"github.com/ekelhala/opentambo/internal/desk/store"
 )
 
+// cacheIndexVersion and cachePolicyFile describe the pre-SQLite per-file
+// formats (index.json / policy.json). They exist only so existing data
+// directories import into the database once; new writes are database rows.
 const cacheIndexVersion = 1
 
-// cachePolicyFile persists a namespace's maintenance policy next to its
-// snapshots so relaunches and cache listings restore the real limits before
-// any destructive maintenance instead of guessing defaults.
 const cachePolicyFile = "policy.json"
 
 type cachePolicy struct {
@@ -61,6 +66,7 @@ type cacheIndex struct {
 
 type cacheStore struct {
 	mu            sync.Mutex
+	db            *sql.DB
 	dir           string
 	namespace     string
 	maxBytes      int64
@@ -88,27 +94,31 @@ type tempReservation struct {
 	at    time.Time
 }
 
-func newCacheStore(dir, namespace string, maxBytes, maxEntryBytes int64, ttl time.Duration) (*cacheStore, error) {
-	return openCacheStore(dir, namespace, &cachePolicy{MaxBytes: maxBytes, MaxEntryBytes: maxEntryBytes, TTLSeconds: int64(ttl / time.Second)})
+func newCacheStore(db *sql.DB, dir, namespace string, maxBytes, maxEntryBytes int64, ttl time.Duration) (*cacheStore, error) {
+	return openCacheStore(db, dir, namespace, &cachePolicy{MaxBytes: maxBytes, MaxEntryBytes: maxEntryBytes, TTLSeconds: int64(ttl / time.Second)})
 }
 
 // observeCacheStore opens a discovered namespace directory for reporting.
 // The persisted policy is restored when present; opening never runs
 // destructive maintenance, so a listing cannot prune snapshots under guessed
 // default limits.
-func observeCacheStore(dir, namespace string) (*cacheStore, error) {
-	s, err := openCacheStore(dir, namespace, nil)
+func observeCacheStore(db *sql.DB, dir, namespace string) (*cacheStore, error) {
+	s, err := openCacheStore(db, dir, namespace, nil)
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-// openCacheStore loads a namespace directory. When policy is non-nil it is
-// the authoritative policy (a launch): it is persisted and maintenance runs
-// under it immediately. When policy is nil the persisted policy is restored
-// if present, and no destructive maintenance runs at open.
-func openCacheStore(dir, namespace string, policy *cachePolicy) (*cacheStore, error) {
+// openCacheStore loads a namespace directory. Durable policy and snapshot
+// metadata live in the database; blobs stay as files under dir. When policy
+// is non-nil it is the authoritative policy (a launch): it is persisted and
+// maintenance runs under it immediately. When policy is nil the persisted
+// policy is restored if present, and no destructive maintenance runs at
+// open. A namespace directory that still carries pre-SQLite policy.json /
+// index.json files imports them once, inside one transaction, and keeps the
+// originals aside as *.migrated.
+func openCacheStore(db *sql.DB, dir, namespace string, policy *cachePolicy) (*cacheStore, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
@@ -119,9 +129,9 @@ func openCacheStore(dir, namespace string, policy *cachePolicy) (*cacheStore, er
 	if err = os.Chmod(resolved, 0700); err != nil {
 		return nil, err
 	}
-	s := &cacheStore{dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, invalid: map[string]bool{}, temps: map[string]*tempReservation{}, pins: map[string]int{}, now: time.Now}
-	if persisted, ok := readCachePolicy(resolved); ok {
-		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
+	s := &cacheStore{db: db, dir: resolved, namespace: namespace, maxBytes: defaultCacheMaxBytes, maxEntryBytes: defaultCacheMaxEntryBytes, ttl: secondsDuration(defaultCacheTTLSeconds), entries: map[string]*CacheEntry{}, invalid: map[string]bool{}, temps: map[string]*tempReservation{}, pins: map[string]int{}, now: time.Now}
+	if err = s.restorePolicy(); err != nil {
+		return nil, err
 	}
 	if policy != nil {
 		s.maxBytes, s.maxEntryBytes, s.ttl = policy.MaxBytes, policy.MaxEntryBytes, secondsDuration(policy.TTLSeconds)
@@ -146,6 +156,85 @@ func openCacheStore(dir, namespace string, policy *cachePolicy) (*cacheStore, er
 	return s, nil
 }
 
+// restorePolicy adopts the database-persisted limits when present,
+// importing a pre-SQLite directory first when the namespace row does not
+// exist yet.
+func (s *cacheStore) restorePolicy() error {
+	persisted, found, err := store.Namespace(s.db, s.dir)
+	if err != nil {
+		return err
+	}
+	if !found {
+		if err = s.importLegacy(); err != nil {
+			return err
+		}
+		if persisted, found, err = store.Namespace(s.db, s.dir); err != nil {
+			return err
+		}
+	}
+	if found && persisted.HasPolicy {
+		s.maxBytes, s.maxEntryBytes, s.ttl = persisted.MaxBytes, persisted.MaxEntryBytes, secondsDuration(persisted.TTLSeconds)
+	}
+	return nil
+}
+
+// importLegacy moves a pre-SQLite namespace directory (policy.json +
+// index.json) into the database in one transaction and renames the
+// originals aside. A directory without legacy files is registered as an
+// identity-only row (no policy), so listings keep defaults without ever
+// persisting guessed limits as authoritative.
+func (s *cacheStore) importLegacy() error {
+	ns := store.CacheNamespace{Dir: s.dir, Namespace: s.namespace}
+	policy, hadPolicy := readCachePolicy(s.dir)
+	if hadPolicy {
+		ns.MaxBytes, ns.MaxEntryBytes, ns.TTLSeconds, ns.HasPolicy = policy.MaxBytes, policy.MaxEntryBytes, policy.TTLSeconds, true
+	}
+	snapshots, err := legacyIndexSnapshots(s.dir)
+	if err != nil {
+		return err
+	}
+	if err = store.ImportNamespace(s.db, ns, snapshots); err != nil {
+		return fmt.Errorf("import legacy cache namespace: %w", err)
+	}
+	for _, name := range []string{"index.json", cachePolicyFile} {
+		path := filepath.Join(s.dir, name)
+		if err = os.Rename(path, path+".migrated"); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// legacyIndexSnapshots decodes a pre-SQLite index.json into committed-ready
+// rows, dropping entries the same validation the legacy loader applied
+// would have dropped. A missing file yields no rows, not an error.
+func legacyIndexSnapshots(dir string) ([]store.Snapshot, error) {
+	contents, err := os.ReadFile(filepath.Join(dir, "index.json"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var index cacheIndex
+	if err = json.Unmarshal(contents, &index); err != nil {
+		return nil, fmt.Errorf("import legacy cache index: %w", err)
+	}
+	if index.Version != cacheIndexVersion {
+		return nil, fmt.Errorf("unsupported legacy cache index version %d", index.Version)
+	}
+	var snapshots []store.Snapshot
+	for id, e := range index.Entries {
+		if e == nil || e.ID != id || filepath.Base(e.Filename) != e.Filename || e.Checksum == "" || len(e.PromptTokens) == 0 {
+			continue
+		}
+		if snap, ok := snapshotFromEntry(e); ok {
+			snapshots = append(snapshots, snap)
+		}
+	}
+	return snapshots, nil
+}
+
 func readCachePolicy(dir string) (cachePolicy, bool) {
 	contents, err := os.ReadFile(filepath.Join(dir, cachePolicyFile))
 	if err != nil {
@@ -161,17 +250,13 @@ func readCachePolicy(dir string) (cachePolicy, bool) {
 	return p, true
 }
 
-// writePolicyLocked persists the maintenance policy atomically.
+// writePolicyLocked persists the maintenance policy as the namespace row.
 func (s *cacheStore) writePolicyLocked() error {
-	contents, err := json.Marshal(cachePolicy{MaxBytes: s.maxBytes, MaxEntryBytes: s.maxEntryBytes, TTLSeconds: int64(s.ttl / time.Second)})
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(s.dir, cachePolicyFile)
-	if err = os.WriteFile(path+".tmp", contents, 0600); err != nil {
-		return err
-	}
-	return os.Rename(path+".tmp", path)
+	return store.SaveNamespace(s.db, store.CacheNamespace{
+		Dir: s.dir, Namespace: s.namespace,
+		MaxBytes: s.maxBytes, MaxEntryBytes: s.maxEntryBytes,
+		TTLSeconds: int64(s.ttl / time.Second), HasPolicy: true,
+	})
 }
 
 // applyPolicy updates maintenance limits on an open store and persists them.
@@ -188,18 +273,17 @@ func (s *cacheStore) applyPolicy(maxBytes, maxEntryBytes int64, ttl time.Duratio
 	return s.commitLocked()
 }
 
-// recoverFiles removes interrupted publications (temp files) and binary files
-// that the committed index does not reference.
+// recoverFiles removes interrupted publications (temp files) and binary
+// files that no committed database row references.
 func (s *cacheStore) recoverFiles() error {
 	keep := map[string]bool{}
-	if contents, err := os.ReadFile(filepath.Join(s.dir, "index.json")); err == nil {
-		var index cacheIndex
-		if err = json.Unmarshal(contents, &index); err == nil {
-			for _, e := range index.Entries {
-				if e != nil && filepath.Base(e.Filename) == e.Filename {
-					keep[e.Filename] = true
-				}
-			}
+	rows, err := store.SnapshotsInDir(s.db, s.dir)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if filepath.Base(row.Filename) == row.Filename {
+			keep[row.Filename] = true
 		}
 	}
 	items, err := os.ReadDir(s.dir)
@@ -218,82 +302,93 @@ func (s *cacheStore) recoverFiles() error {
 	return nil
 }
 
-// loadLocked replaces the in-memory index from disk, dropping entries whose
-// files are missing or have the wrong size (an interrupted commit or an
-// externally modified snapshot). A pinned entry is never dropped here: a
-// live restore owns its file, so the file stays on disk and the entry stays
-// tracked but is marked invalid until cleanup runs when the final pin is
-// released (issue #22).
+// loadLocked replaces the in-memory index from committed database rows,
+// dropping entries whose files are missing or have the wrong size (an
+// interrupted commit or an externally modified snapshot). A pinned entry is
+// never dropped here: a live restore owns its file, so the file stays on
+// disk and the entry stays tracked but is marked invalid until cleanup runs
+// when the final pin is released (issue #22).
 func (s *cacheStore) loadLocked() error {
 	entries := map[string]*CacheEntry{}
 	invalid := map[string]bool{}
-	contents, err := os.ReadFile(filepath.Join(s.dir, "index.json"))
+	rows, err := store.Snapshots(s.db, s.dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			s.entries = entries
-			s.invalid = invalid
-			return nil
-		}
 		return err
 	}
-	var index cacheIndex
-	if err = json.Unmarshal(contents, &index); err != nil {
-		return fmt.Errorf("cache index: %w", err)
-	}
-	if index.Version != cacheIndexVersion {
-		return fmt.Errorf("unsupported cache index version %d", index.Version)
-	}
-	for id, e := range index.Entries {
-		if e == nil || e.ID != id || filepath.Base(e.Filename) != e.Filename || e.Checksum == "" || len(e.PromptTokens) == 0 {
+	for _, row := range rows {
+		e, ok := entryFromSnapshot(s.namespace, row)
+		if !ok {
 			continue
 		}
 		info, err := os.Stat(filepath.Join(s.dir, e.Filename))
 		broken := err != nil || !info.Mode().IsRegular() || info.Size() != e.Bytes
-		if broken || s.invalid[id] {
-			if s.pins[id] > 0 {
+		if broken || s.invalid[e.ID] {
+			if s.pins[e.ID] > 0 {
 				// A live restore owns this file. Keep the entry tracked and
 				// carry the invalid mark across reloads: the size check here
 				// cannot see a same-size checksum tamper found earlier.
-				entries[id] = e
-				invalid[id] = true
+				entries[e.ID] = e
+				invalid[e.ID] = true
 				continue
 			}
 			_ = os.Remove(filepath.Join(s.dir, e.Filename))
 			continue
 		}
-		entries[id] = e
+		entries[e.ID] = e
 	}
 	s.entries = entries
 	s.invalid = invalid
 	return nil
 }
 
+// commitLocked rewrites this namespace's committed snapshot rows in one
+// transaction: the durable commit point of every mutation.
 func (s *cacheStore) commitLocked() error {
-	contents, err := json.Marshal(cacheIndex{Version: cacheIndexVersion, Entries: s.entries})
+	rows := make([]store.Snapshot, 0, len(s.entries))
+	for _, e := range s.entries {
+		snap, ok := snapshotFromEntry(e)
+		if !ok {
+			continue
+		}
+		rows = append(rows, snap)
+	}
+	return store.ReplaceSnapshots(s.db, s.dir, rows)
+}
+
+// snapshotFromEntry converts one index entry to its row. Entries carrying
+// anything the row cannot honestly describe (foreign filenames, missing
+// checksum or verified tokens) are skipped, matching the legacy loader's
+// validation.
+func snapshotFromEntry(e *CacheEntry) (store.Snapshot, bool) {
+	if e == nil || filepath.Base(e.Filename) != e.Filename || e.Checksum == "" || len(e.PromptTokens) == 0 {
+		return store.Snapshot{}, false
+	}
+	tokens, err := json.Marshal(e.PromptTokens)
 	if err != nil {
-		return err
+		return store.Snapshot{}, false
 	}
-	path := filepath.Join(s.dir, "index.json")
-	temporary, err := os.OpenFile(path+".tmp", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
+	return store.Snapshot{
+		ID: e.ID, NamespaceDir: "", Filename: e.Filename, Checksum: e.Checksum,
+		PromptTokensJSON: string(tokens), SavedTokens: e.SavedTokens, Bytes: e.Bytes,
+		CreatedAt: e.CreatedAt, LastUsedAt: e.LastUsedAt,
+	}, true
+}
+
+// entryFromSnapshot rebuilds an index entry from its row; rows that fail
+// validation are skipped like the legacy loader did.
+func entryFromSnapshot(namespace string, row store.Snapshot) (*CacheEntry, bool) {
+	if row.ID == "" || filepath.Base(row.Filename) != row.Filename || row.Checksum == "" {
+		return nil, false
 	}
-	if _, err = temporary.Write(contents); err == nil {
-		err = temporary.Sync()
+	var tokens []int32
+	if err := json.Unmarshal([]byte(row.PromptTokensJSON), &tokens); err != nil || len(tokens) == 0 {
+		return nil, false
 	}
-	_ = temporary.Close()
-	if err != nil {
-		return err
-	}
-	if err = os.Rename(path+".tmp", path); err != nil {
-		return err
-	}
-	directory, err := os.Open(s.dir)
-	if err == nil {
-		_ = directory.Sync()
-		_ = directory.Close()
-	}
-	return nil
+	return &CacheEntry{
+		ID: row.ID, Namespace: namespace, Filename: row.Filename, Checksum: row.Checksum,
+		PromptTokens: tokens, SavedTokens: row.SavedTokens, Bytes: row.Bytes,
+		CreatedAt: row.CreatedAt, LastUsedAt: row.LastUsedAt,
+	}, true
 }
 
 // mutate runs f against freshly loaded committed state under the

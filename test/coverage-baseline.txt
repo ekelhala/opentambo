@@ -17,5 +17,15 @@
 #     GOCOVERDIR), which merges into coverage.integration.out and raises
 #     this floor in Stage 2.
 #   Stage 2: module floor 80%, cmd/opentambo floor including main().
+#
+# Calibration note (issue #15): the gate originally summed the raw profile
+# directly. With -coverpkg=./... every test binary records every block, so
+# that sum counted each statement once per test binary and reported diluted
+# percentages (cmd/opentambo read 25.4% where the true figure was 76.2%).
+# scripts/go-coverage.sh now canonicalizes the profile first (one record per
+# block, covered when any test binary executed it). The floors below are
+# the honest measurements with headroom; every number here is at or above
+# the corresponding diluted-era floor, so the ratchet was never lowered.
 module 78.0
-package cmd/opentambo 22.0
+package cmd/opentambo 74.0
+package internal/desk/store 72.0

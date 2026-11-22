@@ -64,9 +64,13 @@ Managed inference processes bind to `127.0.0.1`.
 
 ## State
 
-Files are the model inventory. Jobs and per-model settings are saved
-atomically in `--data/state.json` with owner-only permissions; environment
-overrides are stored there in plaintext. Interrupted downloads can be resumed
-after a restart. Model servers are stopped with the manager and do not
-automatically restart — see [deployment.md](deployment.md) to run opentambo
-under systemd.
+Files are the model inventory. Durable state — download jobs with resume
+checkpoints, saved launch profiles, run history, and prompt-cache policy and
+snapshot metadata — lives in an embedded SQLite database at
+`--data/opentambo.db` with owner-only permissions; environment overrides are
+stored there in plaintext. Existing `state.json` / `index.json` installations
+are imported once at startup and the originals kept aside as `*.migrated`.
+Interrupted downloads can be resumed after a restart. Model servers are
+stopped with the manager and do not automatically restart — see
+[deployment.md](deployment.md) to run opentambo under systemd. Data layout,
+crash recovery and backup/restore: [storage.md](storage.md).

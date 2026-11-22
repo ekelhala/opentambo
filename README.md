@@ -8,8 +8,8 @@ and restore computed inference state across conversation switches and process
 restarts for supported model/build combinations; and operate the model
 inventory, Hugging Face downloads, server lifecycle and cache management from
 the browser. OpenAI-compatible `/v1` routing keeps client URLs stable. One Go
-binary with the UI embedded — no database, npm, Docker, or bundled inference
-runtime.
+binary with the UI embedded and embedded SQLite for durable state — no
+external database service, npm, Docker, or bundled inference runtime.
 
 ## Install (Linux and macOS)
 
@@ -44,6 +44,7 @@ sudo, and only one instance per data directory.
 ## Documentation
 
 - [Getting started](docs/getting-started.md) — downloads, models, servers, flags, state
+- [Storage and persistence](docs/storage.md) — embedded SQLite layout, migration, backup/restore
 - [LiteLLM gateway](docs/gateway.md) — one stable `/v1` entry point for all local models
 - [Persistent prompt cache](docs/prompt-cache.md) — resume conversations without re-processing prompts
 - [Deployment](docs/deployment.md) — systemd unit, manual installs
