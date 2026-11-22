@@ -12,16 +12,16 @@ sharing one model/cache directory safe.
 Durable metadata lives in tables; large payloads stay ordinary files that are
 easy to inspect, back up next to the database, and delete without a migration:
 
-| Data | Home |
-| --- | --- |
-| Download jobs, resume checkpoints, ETag/validators, errors | `downloads` table |
-| Saved launch profiles incl. full prompt-cache configuration | `profiles` table |
-| Run history (every managed process, live vs. historical) | `runs` table |
-| Cache namespace identity + retained storage policy | `cache_namespaces` table |
-| Snapshot metadata: checksums, indexed token prefixes, timestamps | `cache_snapshots` table |
-| Import/migration bookkeeping markers | `meta` table |
-| GGUF models | files under `--models` |
-| KV snapshot blobs | `<id>.bin` files under each namespace directory |
+| Data                                                             | Home                                            |
+| ---------------------------------------------------------------- | ----------------------------------------------- |
+| Download jobs, resume checkpoints, ETag/validators, errors       | `downloads` table                               |
+| Saved launch profiles incl. full prompt-cache configuration      | `profiles` table                                |
+| Run history (every managed process, live vs. historical)         | `runs` table                                    |
+| Cache namespace identity + retained storage policy               | `cache_namespaces` table                        |
+| Snapshot metadata: checksums, indexed token prefixes, timestamps | `cache_snapshots` table                         |
+| Import/migration bookkeeping markers                             | `meta` table                                    |
+| GGUF models                                                      | files under `--models`                          |
+| KV snapshot blobs                                                | `<id>.bin` files under each namespace directory |
 
 Profiles may contain environment secrets and snapshot rows contain token
 prefixes (conversation data), so the database and its WAL sidecars are created
