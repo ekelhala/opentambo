@@ -5,13 +5,13 @@ one host. It needs only the binary and your own working `llama-server` build.
 
 ## Flags
 
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--listen` | `127.0.0.1:8090` | HTTP listen address (env `OPENTAMBO_LISTEN`) |
-| `--models` | `./models` | model directory (must already be mounted when on a separate disk) |
-| `--llama-server` | `llama-server` (PATH) | native llama-server executable to launch |
-| `--data` | `./data` | job history, launch settings, prompt cache |
-| `--downloads` | `3` | maximum parallel downloads |
+| Flag             | Default               | Purpose                                                           |
+| ---------------- | --------------------- | ----------------------------------------------------------------- |
+| `--listen`       | `127.0.0.1:8090`      | HTTP listen address (env `OPENTAMBO_LISTEN`)                      |
+| `--models`       | `./models`            | model directory (must already be mounted when on a separate disk) |
+| `--llama-server` | `llama-server` (PATH) | native llama-server executable to launch                          |
+| `--data`         | `./data`              | job history, launch settings, prompt cache                        |
+| `--downloads`    | `3`                   | maximum parallel downloads                                        |
 
 ## Downloads
 
@@ -43,7 +43,7 @@ GGUFs appear automatically; deletion is always explicit.
 Launch a model with context size, GPU layers, port, extra arguments, and
 environment settings. The server page shows PID, process state, bounded live
 logs, an explicit Health action, and the exact argument vector and environment
-overrides. Stop is graceful, then kill after five seconds; *Run again* reopens
+overrides. Stop is graceful, then kill after five seconds; _Run again_ reopens
 the saved launch form.
 
 Extra arguments use **one argument per line**, with each value on its own

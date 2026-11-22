@@ -24,7 +24,11 @@ function Icon({ children, ...props }: { children: ReactNode } & React.SVGProps<S
 /** The tambo mark: a doorway in a square frame, lamp lit from within. */
 export function DoorwayMark({ lit, className }: { lit?: boolean; className?: string }) {
   return (
-    <svg className={className ? `${className}${lit ? ' lit' : ''}` : `mark${lit ? ' lit' : ''}`} viewBox="0 0 32 32" aria-hidden="true">
+    <svg
+      className={className ? `${className}${lit ? ' lit' : ''}` : `mark${lit ? ' lit' : ''}`}
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+    >
       <rect className="door-frame" x="1" y="1" width="30" height="30" />
       <path className="door-glow" d="M10 27 v-9 a6 6 0 0 1 12 0 v9 z" />
     </svg>

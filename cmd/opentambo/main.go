@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,36 +15,80 @@ import (
 	"github.com/ekelhala/opentambo/internal/desk"
 )
 
-func main() {
-	defaultListen := os.Getenv("OPENTAMBO_LISTEN")
-	if defaultListen == "" {
-		defaultListen = "127.0.0.1:8090"
+// options is the effective startup configuration resolved from flags with
+// the documented environment fallbacks.
+type options struct {
+	listen   string
+	models   string
+	binary   string
+	data     string
+	parallel int
+}
+
+const defaultListen = "127.0.0.1:8090"
+
+// parseArgs resolves startup options. The OPENTAMBO_LISTEN environment
+// variable supplies the default listen address; an explicit -listen flag
+// still wins.
+func parseArgs(args []string, getenv func(string) string) (options, error) {
+	envListen := getenv("OPENTAMBO_LISTEN")
+	if envListen == "" {
+		envListen = defaultListen
 	}
-	listen := flag.String("listen", defaultListen, "HTTP listen address (env OPENTAMBO_LISTEN)")
-	models := flag.String("models", "./models", "model directory")
-	binary := flag.String("llama-server", "llama-server", "native llama-server executable")
-	data := flag.String("data", "./data", "job history and launch settings directory")
-	parallel := flag.Int("downloads", 3, "maximum parallel downloads")
-	flag.Parse()
-	app, err := desk.New(*models, *binary, *data, *parallel)
+	fs := flag.NewFlagSet("opentambo", flag.ContinueOnError)
+	o := options{}
+	fs.StringVar(&o.listen, "listen", envListen, "HTTP listen address (env OPENTAMBO_LISTEN)")
+	fs.StringVar(&o.models, "models", "./models", "model directory")
+	fs.StringVar(&o.binary, "llama-server", "llama-server", "native llama-server executable")
+	fs.StringVar(&o.data, "data", "./data", "job history and launch settings directory")
+	fs.IntVar(&o.parallel, "downloads", 3, "maximum parallel downloads")
+	if err := fs.Parse(args); err != nil {
+		return options{}, err
+	}
+	return o, nil
+}
+
+// serve runs the manager until ctx is cancelled, then shuts the HTTP server
+// and all managed children down gracefully.
+func serve(ctx context.Context, o options, stdout io.Writer) error {
+	app, err := desk.New(o.models, o.binary, o.data, o.parallel)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	server := &http.Server{Addr: *listen, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: o.listen, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	shutdownRequested := make(chan struct{})
 	go func() {
 		<-ctx.Done()
-		shutdown, done := context.WithTimeout(context.Background(), 10*time.Second)
+		close(shutdownRequested)
+		shutdownCtx, done := context.WithTimeout(context.Background(), 10*time.Second)
 		defer done()
-		_ = server.Shutdown(shutdown)
-		app.Close()
+		_ = server.Shutdown(shutdownCtx)
 	}()
-	log.Printf("opentambo listening at http://%s (no authentication)", *listen)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	if _, err := io.WriteString(stdout, "opentambo listening at http://"+o.listen+" (no authentication)\n"); err != nil {
+		return err
+	}
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		app.Close()
+		return err
 	}
 	// Wait for child processes and download workers to finish on shutdown.
-	<-ctx.Done()
+	<-shutdownRequested
 	app.Close()
+	return nil
+}
+
+func main() {
+	log.SetFlags(0)
+	o, err := parseArgs(os.Args[1:], os.Getenv)
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
+		os.Exit(2)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := serve(ctx, o, os.Stdout); err != nil {
+		log.Fatal(err)
+	}
 }

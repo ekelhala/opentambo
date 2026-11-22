@@ -20,7 +20,12 @@ export function uptime(started: string, ended?: string | null): string {
 }
 
 export function date(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function shellQuote(arg: string): string {

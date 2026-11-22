@@ -292,7 +292,9 @@ func newCacheFixture(t *testing.T) *cacheFixture {
 	return &cacheFixture{app: a, rc: rc, fake: fake, url: desk.URL}
 }
 
-func (fx *cacheFixture) post(t *testing.T, body string) *http.Response {
+// post sends one gateway request and returns its status code. The body is
+// drained here so callers never hold an open response across the settle.
+func (fx *cacheFixture) post(t *testing.T, body string) int {
 	t.Helper()
 	res, err := http.Post(fx.url+"/v1/chat/completions", "application/json", strings.NewReader(body))
 	if err != nil {
@@ -304,7 +306,7 @@ func (fx *cacheFixture) post(t *testing.T, body string) *http.Response {
 	// the lease is released, so taking and returning the lease proves the
 	// previous request fully finished its cache bookkeeping.
 	fx.settle(t)
-	return res
+	return res.StatusCode
 }
 
 // settle proves the run's current coordinator finished its post-response
@@ -389,9 +391,9 @@ func TestProbeRejectsParityMismatch(t *testing.T) {
 
 func TestCachePublishesAfterSuccessfulGeneration(t *testing.T) {
 	fx := newCacheFixture(t)
-	res := fx.post(t, chatBody(`[{"role":"user","content":"first question"}]`))
-	if res.StatusCode != 200 {
-		t.Fatalf("generation failed: %d", res.StatusCode)
+	status := fx.post(t, chatBody(`[{"role":"user","content":"first question"}]`))
+	if status != 200 {
+		t.Fatalf("generation failed: %d", status)
 	}
 	summary := fx.rc.summary()
 	if summary.Stats.Saves != 1 || summary.Stats.RestoreFailures != 0 {
@@ -475,9 +477,9 @@ func TestCacheIneligibleEndpointStillRuns(t *testing.T) {
 
 func TestCacheNeverPublishesFailedOrTruncatedResponses(t *testing.T) {
 	fx := newCacheFixture(t)
-	res := fx.post(t, chatBody(`[{"role":"user","content":"will fail"}]`, `"fake_fail":true`))
-	if res.StatusCode != 500 {
-		t.Fatalf("upstream failure hidden: %d", res.StatusCode)
+	status := fx.post(t, chatBody(`[{"role":"user","content":"will fail"}]`, `"fake_fail":true`))
+	if status != 500 {
+		t.Fatalf("upstream failure hidden: %d", status)
 	}
 	if saves := fx.rc.summary().Stats.Saves; saves != 0 {
 		t.Fatal("published after a failed response")
@@ -518,9 +520,9 @@ func TestCacheFailedRestoreStillServesRequest(t *testing.T) {
 	fx.fake.mu.Lock()
 	fx.fake.failRestore = true
 	fx.fake.mu.Unlock()
-	res := fx.post(t, chatBody(`[{"role":"user","content":"restore me later"}]`))
-	if res.StatusCode != 200 {
-		t.Fatalf("a failed restore must fall back to cold generation: %d", res.StatusCode)
+	status := fx.post(t, chatBody(`[{"role":"user","content":"restore me later"}]`))
+	if status != 200 {
+		t.Fatalf("a failed restore must fall back to cold generation: %d", status)
 	}
 	summary := restarted.summary()
 	if summary.Stats.RestoreFailures == 0 || summary.Stats.Hits != 0 {
@@ -566,9 +568,9 @@ func TestCacheUnavailableStatusKeepsPlainPath(t *testing.T) {
 	fx.rc.status = "unsupported"
 	fx.rc.reason = "simulated"
 	fx.rc.mu.Unlock()
-	res := fx.post(t, chatBody(`[{"role":"user","content":"plain"}]`))
-	if res.StatusCode != 200 {
-		t.Fatalf("plain path broke: %d", res.StatusCode)
+	status := fx.post(t, chatBody(`[{"role":"user","content":"plain"}]`))
+	if status != 200 {
+		t.Fatalf("plain path broke: %d", status)
 	}
 	if saves := fx.rc.summary().Stats.Saves; saves != 0 {
 		t.Fatal("unsupported cache published")
@@ -658,9 +660,9 @@ func TestCacheABARestoresDespiteUnrelatedLiveState(t *testing.T) {
 			if tc.bContent != "" {
 				fx.post(t, chatBody(fmt.Sprintf(`[{"role":"user","content":%q}]`, tc.bContent)))
 			}
-			res := fx.post(t, a)
-			if res.StatusCode != 200 {
-				t.Fatalf("request failed: %d", res.StatusCode)
+			status := fx.post(t, a)
+			if status != 200 {
+				t.Fatalf("request failed: %d", status)
 			}
 			summary := fx.rc.summary()
 			switch {
@@ -715,9 +717,9 @@ func TestCacheExpiredSnapshotNotRestoredAfterIdle(t *testing.T) {
 	fx.rc.spec.TTLSeconds = 60
 	fx.rc.store.ttl = time.Minute
 	fx.rc.store.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
-	res := fx.post(t, first)
-	if res.StatusCode != 200 {
-		t.Fatalf("request failed: %d", res.StatusCode)
+	status := fx.post(t, first)
+	if status != 200 {
+		t.Fatalf("request failed: %d", status)
 	}
 	summary := restarted.summary()
 	if summary.Stats.Restores != 0 || summary.Stats.Hits != 0 {

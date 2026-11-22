@@ -32,9 +32,7 @@ export function ServerRow({ run }: { run: Run }) {
             {run.pid ? <span className="shrink-0">pid {run.pid}</span> : null}
           </span>
         </span>
-        <span className="num shrink-0 text-right text-xs text-[var(--t-text-3)]">
-          {uptime(run.started, run.ended)}
-        </span>
+        <span className="num shrink-0 text-right text-xs text-[var(--t-text-3)]">{uptime(run.started, run.ended)}</span>
         <ChevronRightIcon className="size-4 shrink-0 text-[var(--t-text-3)]" />
       </span>
     </button>

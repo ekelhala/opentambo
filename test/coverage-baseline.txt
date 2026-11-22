@@ -1,0 +1,21 @@
+# Go statement-coverage ratchet (issue #19).
+#
+# Format (one rule per line):
+#   module <floor>            module-wide statement coverage
+#   package <dir> <floor>     per-package statement coverage
+#
+# These floors are a ratchet. Raising a number as tests land is expected;
+# lowering one, adding an exclusion, or removing a rule is a policy change
+# that requires an explanation in the PR (see docs/testing.md). A missing
+# coverage.out artifact fails the check outright.
+#
+# Rollout stages (documented so a silent drift is visible in review):
+#   Stage 1 (2026-11): measured baseline with the handwritten entry point
+#     and download-action paths covered; cmd/opentambo was 0% before.
+#     Its main() stays unit-uncovered by design — it is exercised as an
+#     instrumented subprocess by the integration suite (go build -cover +
+#     GOCOVERDIR), which merges into coverage.integration.out and raises
+#     this floor in Stage 2.
+#   Stage 2: module floor 80%, cmd/opentambo floor including main().
+module 78.0
+package cmd/opentambo 22.0

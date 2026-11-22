@@ -53,9 +53,7 @@ export function ServerDetail({
         <Button variant="secondary" size="sm" className="w-fit" onClick={() => navigate('servers')}>
           <BackIcon /> Servers
         </Button>
-        <p className="py-10 text-center text-sm text-[var(--t-text-2)]">
-          This run is no longer in state.
-        </p>
+        <p className="py-10 text-center text-sm text-[var(--t-text-2)]">This run is no longer in state.</p>
       </div>
     )
   }
@@ -68,14 +66,14 @@ export function ServerDetail({
         onChanged()
       } else {
         const data = await api<{ status: string; detail?: string; http_status?: number; response?: unknown }>(
-          `runs/${run.id}/health`
+          `runs/${run.id}/health`,
         )
         setHealth(
           data.http_status
             ? `${data.http_status} ${JSON.stringify(data.response ?? '')}`
             : data.detail
               ? `${data.status}: ${data.detail}`
-              : data.status
+              : data.status,
         )
       }
     } catch (error) {
@@ -99,12 +97,7 @@ export function ServerDetail({
           <span className="grow" />
           {serving ? (
             <>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={run.status === 'stopping'}
-                onClick={() => act('stop')}
-              >
+              <Button variant="danger" size="sm" disabled={run.status === 'stopping'} onClick={() => act('stop')}>
                 <StopIcon />
                 {run.status === 'stopping' ? 'Stopping…' : 'Stop'}
               </Button>
@@ -148,7 +141,9 @@ export function ServerDetail({
           <div className="mt-2.5">
             <StatusPill status={run.status} />
           </div>
-          <span className="f">{serving ? 'managed process' : run.status === 'failed' ? 'exited with error' : 'not serving'}</span>
+          <span className="f">
+            {serving ? 'managed process' : run.status === 'failed' ? 'exited with error' : 'not serving'}
+          </span>
         </div>
         <div className="stat">
           <span className="k">Process</span>
@@ -199,7 +194,9 @@ export function ServerDetail({
               label="Environment overrides"
               value={
                 Object.entries(run.launch.env || {}).length
-                  ? Object.entries(run.launch.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')
+                  ? Object.entries(run.launch.env || {})
+                      .map(([k, v]) => `${k}=${v}`)
+                      .join('\n')
                   : '(none)'
               }
             />

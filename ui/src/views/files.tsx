@@ -24,7 +24,7 @@ export function FilesView({
   const runningAlias = new Map(
     state.runs
       .filter((r) => r.status === 'running' || r.status === 'stopping')
-      .map((r) => [r.launch.model, r.launch.name])
+      .map((r) => [r.launch.model, r.launch.name]),
   )
   const total = state.models.reduce((sum, m) => sum + m.size, 0)
   const needle = query.toLowerCase()
@@ -37,7 +37,7 @@ export function FilesView({
           model.repo.toLowerCase().includes(needle) ||
           quant.label.toLowerCase().includes(needle) ||
           quant.family.toLowerCase().includes(needle) ||
-          quant.files.some((file) => file.path.toLowerCase().includes(needle))
+          quant.files.some((file) => file.path.toLowerCase().includes(needle)),
       ),
     }))
     .filter((model) => model.quantizations.length > 0)
@@ -62,12 +62,10 @@ export function FilesView({
               />
             </div>
             <span className="badge badge-idle">
-              {state.catalog.length} {state.catalog.length === 1 ? 'model' : 'models'} ·{' '}
-              {state.models.length} GGUF files
+              {state.catalog.length} {state.catalog.length === 1 ? 'model' : 'models'} · {state.models.length} GGUF
+              files
             </span>
-            <span className="mono text-xs text-[var(--t-text-3)]">
-              scan of {state.settings.models}
-            </span>
+            <span className="mono text-xs text-[var(--t-text-3)]">scan of {state.settings.models}</span>
           </div>
           {repos.length ? (
             <table className="table">
@@ -128,22 +126,17 @@ function RepoRows({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
             <span className="fname font-semibold">{model.repo}</span>
             <span className="badge badge-idle">
-              {model.quantizations.length}{' '}
-              {model.quantizations.length === 1 ? 'quantization' : 'quantizations'}
+              {model.quantizations.length} {model.quantizations.length === 1 ? 'quantization' : 'quantizations'}
             </span>
             <span className="num text-xs text-[var(--t-text-3)]">{bytes(model.size)}</span>
-            <span className="mono ml-auto hidden truncate text-xs text-[var(--t-text-3)] lg:inline">
-              {model.path}
-            </span>
+            <span className="mono ml-auto hidden truncate text-xs text-[var(--t-text-3)] lg:inline">{model.path}</span>
           </div>
         </td>
       </tr>
       {model.quantizations.map((quant) => {
         const key = quantKey(model, quant)
         const open = !!expanded[key]
-        const alias = quant.files
-          .map((file) => runningAlias.get(file.path))
-          .find((name) => name !== undefined)
+        const alias = quant.files.map((file) => runningAlias.get(file.path)).find((name) => name !== undefined)
         return (
           <QuantRows
             key={key}
@@ -179,12 +172,12 @@ function QuantRows({
     <>
       <tr>
         <td className="max-w-0">
-          <button
-            onClick={onToggle}
-            aria-expanded={open}
-            className="flex w-full min-w-0 items-center gap-2 text-left"
-          >
-            {open ? <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" /> : <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />}
+          <button onClick={onToggle} aria-expanded={open} className="flex w-full min-w-0 items-center gap-2 text-left">
+            {open ? (
+              <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
+            )}
             <span className="badge badge-info shrink-0">{quant.label || 'default'}</span>
             {quant.family && !quant.label && (
               <span className="fname min-w-0 truncate" title={quant.family}>
@@ -195,12 +188,8 @@ function QuantRows({
           </button>
         </td>
         <td className="num text-right text-xs">{bytes(quant.size)}</td>
-        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">
-          {quant.shards}
-        </td>
-        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">
-          {date(quant.modified)}
-        </td>
+        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{quant.shards}</td>
+        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(quant.modified)}</td>
         <td>
           {alias ? (
             <span className="badge badge-ok">running · {alias}</span>
@@ -234,18 +223,11 @@ function QuantRows({
             </td>
             <td className="num text-right text-xs">{bytes(file.size)}</td>
             <td className="hidden sm:table-cell" />
-            <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">
-              {date(file.modified)}
-            </td>
+            <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(file.modified)}</td>
             <td />
             <td>
               <div className="flex justify-end">
-                <Button
-                  variant="danger-ghost"
-                  size="sm"
-                  disabled={!!alias}
-                  onClick={() => onDelete(file)}
-                >
+                <Button variant="danger-ghost" size="sm" disabled={!!alias} onClick={() => onDelete(file)}>
                   Delete
                 </Button>
               </div>

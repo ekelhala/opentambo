@@ -8,11 +8,20 @@ WEB_DIR := internal/desk/web
 -include .env
 export OPENTAMBO_LISTEN
 
-.PHONY: all build ui dev test generate-api clean
+.PHONY: all build ui dev test test-ui test-integration generate-api clean
+.PHONY: fmt-check lint coverage coverage-check changed-coverage check
 
 # Pinned code generators (dev/CI only; the shipped binary never depends on
 # them). Both read the authoritative contract api/openapi.yaml.
 OAPI_CODEGEN_VERSION := v2.8.2
+
+# Pinned quality tooling (issue #19). golangci-lint embeds the Go version it
+# was built with and refuses to run when that is lower than this module's go
+# directive, so the toolchain used to build it is pinned to match go.mod.
+# CI installs the identical version the same way.
+GOLANGCI_LINT_VERSION := v2.15.0
+GOLANGCI_GO_TOOLCHAIN := go1.27.0
+PRETTIER := $(CURDIR)/ui/node_modules/.bin/prettier
 
 all: build
 
@@ -44,6 +53,46 @@ generate-api:
 test:
 	go vet ./...
 	go test -race ./...
+
+## test-ui: web component/unit tests (bun test)
+test-ui: ui/node_modules
+	cd ui && bun run test
+
+## test-integration: real OpenTambo binary + real pinned llama-server CPU suite
+test-integration:
+	go test -tags integration -count=1 -timeout 40m ./test/integration/...
+
+## fmt-check: gofmt + Prettier in check mode (never edits files)
+fmt-check: ui/node_modules
+	test -z "$$(gofmt -l cmd internal tools)"
+	cd ui && bunx prettier --check .
+	$(PRETTIER) --ignore-path .prettierignore --check --config .prettierrc.json \
+		'*.md' '*.yml' 'docs/**/*.md' 'api/**/*.yaml' '.github/**/*.yml' 'ui/*.json'
+
+## lint: pinned static analysis and complexity gates (Go + frontend)
+lint: ui/node_modules
+	go vet ./...
+	GOTOOLCHAIN=$(GOLANGCI_GO_TOOLCHAIN) go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
+	cd ui && bun run lint
+
+## coverage: race+cover profile, annotated report, and baseline ratchet check
+coverage:
+	scripts/go-coverage.sh
+
+## coverage-check: enforce the recorded coverage floors against coverage.out
+coverage-check:
+	scripts/go-coverage.sh --check-only
+
+## changed-coverage: ≥90% coverage of changed executable Go lines vs a base ref
+## The instrumented integration profile (coverage.integration.out) is merged
+## when present: paths only a real process reaches, like main(), must be
+## proven by executing them, not exempted from the denominator.
+changed-coverage:
+	go run ./tools/covdiff -base $(or $(BASE_REF),origin/main) coverage.out \
+		$(if $(wildcard coverage.integration.out),coverage.integration.out,)
+
+## check: everything CI requires, in the CI order
+check: fmt-check lint test test-ui coverage changed-coverage
 
 clean:
 	rm -rf $(BIN_DIR)

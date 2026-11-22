@@ -1,0 +1,127 @@
+# Focused static-analysis policy (issue #19). Pinned in CI and in the
+# Makefile's `lint` target; keep the two in sync.
+#
+# Deliberately narrow: correctness-oriented analyzers plus the complexity
+# gates from the testing policy. Stylistic rule sets are not enabled —
+# gofmt owns formatting.
+version: '2'
+linters:
+  # default: standard = errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    # Cyclomatic complexity ceiling for new/changed production functions.
+    - cyclop
+    # Cognitive complexity ceiling for production functions.
+    - gocognit
+    # Hygiene the cheap analyzers see directly.
+    - makezero
+    - nilerr
+    - bodyclose
+  settings:
+    cyclop:
+      max-complexity: 15
+    gocognit:
+      min-complexity: 20
+    errcheck:
+      # `_ = f()` is the repo's explicit way to ignore an error.
+      check-blank: false
+      # Deferred cleanup of drained bodies, owned lock files and download
+      # handles is the house style: the scope is ending and there is no
+      # recovery either way. Real dropped returns on other calls are still
+      # flagged.
+      exclude-functions:
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - (*os.Root).Close
+        - syscall.Flock
+        - (net.Listener).Close
+    staticcheck:
+      # ST1005 (error strings must not be capitalized) suppresses proper
+      # nouns; "Hugging Face returned HTTP …" is deliberate phrasing.
+      # Keep the default analyzer set; do not opt into the full style
+      # family (ST1000 package comments and friends) here.
+      checks:
+        - default
+        - '-ST1005'
+  exclusions:
+    generated: lax
+    rules:
+      # Test helpers optimize for failure injection and scenario coverage,
+      # not complexity ceilings; the correctness analyzers still apply.
+      - path: (_test\.go|test/integration/)
+        linters:
+          - cyclop
+          - gocognit
+      # ---------------------------------------------------------------
+      # Documented complexity baseline (issue #19): functions written
+      # before the 15/20 ceilings existed. New or changed functions are
+      # rejected at the ceilings above. Touching one of these requires
+      # reducing it under the limit as part of that change; do not
+      # "fix" the lint by splitting meaningless wrappers. The inventory
+      # and rationale live in docs/testing.md ("Complexity baseline").
+      # ---------------------------------------------------------------
+      - path: internal/desk/cache.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'Probe'
+      - path: internal/desk/cache.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'Prepare'
+      - path: internal/desk/cache_store.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'loadLocked'
+      - path: internal/desk/cache_store.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'enforceLocked'
+      - path: internal/desk/cache_match.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'parseCacheRequest'
+      - path: internal/desk/gguf.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'valueOf'
+      - path: internal/desk/proxy.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'proxyInference'
+      - path: internal/desk/app.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'New'
+      - path: internal/desk/app.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'Handler'
+      - path: internal/desk/cache_api.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'registryCacheStores'
+      - path: internal/desk/downloads.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'addDownload'
+      - path: internal/desk/downloads.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'transfer'
+      - path: internal/desk/processes.go
+        linters:
+          - cyclop
+          - gocognit
+        text: 'launch'

@@ -22,14 +22,14 @@ mockup/               design-language mockups (historical)
 
 ## Make targets
 
-| Target | What it does |
-| --- | --- |
-| `make build` | builds the UI with bun, then the binary with `-tags ui` into `bin/opentambo` |
-| `make ui` | production build of the web UI into `internal/desk/web` |
-| `make dev` | backend on `127.0.0.1:8090` plus the Vite dev server proxying `/api` and `/v1` |
-| `make test` | `go vet ./...` and `go test -race ./...` |
-| `make generate-api` | regenerate Go and TypeScript wire types from `api/openapi.yaml` |
-| `make clean` | removes `bin/` and the web build output |
+| Target              | What it does                                                                   |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `make build`        | builds the UI with bun, then the binary with `-tags ui` into `bin/opentambo`   |
+| `make ui`           | production build of the web UI into `internal/desk/web`                        |
+| `make dev`          | backend on `127.0.0.1:8090` plus the Vite dev server proxying `/api` and `/v1` |
+| `make test`         | `go vet ./...` and `go test -race ./...`                                       |
+| `make generate-api` | regenerate Go and TypeScript wire types from `api/openapi.yaml`                |
+| `make clean`        | removes `bin/` and the web build output                                        |
 
 Copy `.env.example` to `.env` for local overrides (e.g. `OPENTAMBO_LISTEN`
 when the default port is taken); make and the Vite dev server both load it.

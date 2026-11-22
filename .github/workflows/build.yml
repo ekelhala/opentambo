@@ -18,7 +18,6 @@ jobs:
           cache: false
       - run: go vet ./...
       - run: go test -race ./...
-      - run: test -z "$(gofmt -l cmd internal)"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -36,8 +35,88 @@ jobs:
       - name: Web UI type check against generated contract types
         working-directory: ui
         run: bunx tsc -b
+  quality:
+    # Formatting, pinned static analysis and complexity gates (issue #19).
+    # Same commands as `make fmt-check lint`; thresholds and the complexity
+    # baseline live in .golangci.yml and must never be loosened silently.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: make fmt-check
+      - run: make lint
+  coverage:
+    # Statement-coverage ratchet plus changed-line gate (issue #19). A
+    # missing artifact fails; floors live in test/coverage-baseline.txt and
+    # lowering one requires a policy note in the PR description.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Race+cover suite and floor enforcement
+        run: make coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: |
+            coverage.out
+            coverage.html
+          if-no-files-found: error
+  changed-coverage:
+    # Changed executable lines must be >= 90% covered (issue #19). Runs on
+    # both profiles: the unit profile from the coverage job and the merged
+    # instrumented profile from the integration job, so paths only a real
+    # process reaches (main(), CLI exit codes) are proven, not exempted.
+    needs: [coverage, integration]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: go-coverage
+      - uses: actions/download-artifact@v5
+        with:
+          name: integration-coverage
+      - run: make changed-coverage BASE_REF=origin/${{ github.base_ref }}
+  integration:
+    # Real OpenTambo binary (built with -cover) against the pinned real
+    # llama-server build on CPU. Zero executed tests or any skip fails the
+    # job inside the harness; this job gates releases.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Real-backend integration suite
+        run: make test-integration
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-coverage
+          path: coverage.integration.out
+          if-no-files-found: error
   build:
-    needs: test
+    needs: [test, quality, coverage, integration]
     runs-on: ubuntu-latest
     strategy:
       matrix:

@@ -69,7 +69,10 @@ export default function App() {
       setConnected(true)
       const push = (arr: number[], value: number) => [...arr, value].slice(-HISTORY_LENGTH)
       setHistory((h) => ({
-        bandwidth: push(h.bandwidth, next.jobs.reduce((sum, job) => sum + job.bytes_per_second, 0)),
+        bandwidth: push(
+          h.bandwidth,
+          next.jobs.reduce((sum, job) => sum + job.bytes_per_second, 0),
+        ),
         running: push(h.running, next.runs.filter((r) => r.status === 'running' || r.status === 'stopping').length),
         jobs: push(h.jobs, next.jobs.filter((j) => j.status === 'queued' || j.status === 'downloading').length),
       }))
@@ -102,7 +105,7 @@ export default function App() {
       }
       refresh()
     },
-    [refresh]
+    [refresh],
   )
 
   const data = state ?? EMPTY_STATE
@@ -200,8 +203,7 @@ export default function App() {
             <AlertDialogCancel>Keep</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deleting &&
-                call(`models?path=${encodeURIComponent(deleting.path)}`, 'DELETE', undefined, 'Deleted')
+                deleting && call(`models?path=${encodeURIComponent(deleting.path)}`, 'DELETE', undefined, 'Deleted')
               }
             >
               Delete
@@ -238,9 +240,8 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
         )}
         <div className="callout callout-info mt-5">
           <p>
-            <strong>This panel deletes models and runs your runtime.</strong> It ships without
-            authentication on purpose: access control belongs to your Pangolin policy, not to a
-            second login nobody trusts.
+            <strong>This panel deletes models and runs your runtime.</strong> It ships without authentication on
+            purpose: access control belongs to your Pangolin policy, not to a second login nobody trusts.
           </p>
         </div>
       </DialogContent>
