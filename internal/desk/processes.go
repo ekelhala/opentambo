@@ -55,68 +55,86 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	if spec.Env == nil {
 		spec.Env = map[string]string{}
 	}
-	if err := validatePromptCache(spec.PromptCache); err != nil {
+	// Operator launch_defaults.args sit below explicit client args so a
+	// launch from the UI always wins over the shared default (issue #17).
+	if len(a.launchArgs) > 0 {
+		spec.Args = append(append([]string{}, a.launchArgs...), spec.Args...)
+	}
+	// prompt_cache.defaults.enabled makes caching the default for launches
+	// that do not state a preference.
+	if spec.PromptCache == nil && a.cacheEnabled {
+		spec.PromptCache = &api.PromptCache{Enabled: true}
+	}
+	run, err := a.launchResolved(spec)
+	if err != nil {
 		fail(w, err)
 		return
+	}
+	respond(w, 201, run.Run)
+}
+
+// launchResolved runs the full validated launch pipeline for an
+// already-decoded spec. The HTTP handler and configured profile autostart
+// (#17) share it so every child gets identical validation, operator env
+// layering and run history.
+func (a *App) launchResolved(spec api.Launch) (*Run, error) {
+	if err := a.validatePromptCache(spec.PromptCache); err != nil {
+		return nil, err
 	}
 	// Namespace derivation hashes model files; keep that work outside App.mu.
 	var cachePrep *cacheLaunch
 	if spec.PromptCache != nil && spec.PromptCache.Enabled {
 		var err error
 		if cachePrep, err = a.preparePromptCache(spec); err != nil {
-			fail(w, err)
-			return
+			return nil, err
 		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	model, err := a.modelPath(spec.Model)
 	if err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 	if err = parsePort(spec.Port); err != nil {
-		fail(w, err)
-		return
+		return nil, err
+	}
+	if spec.Context == 0 {
+		spec.Context = a.contextSize
+	}
+	if spec.GPULayers == 0 && a.gpuLayers > 0 {
+		spec.GPULayers = a.gpuLayers
 	}
 	if spec.Context < 1 || spec.GPULayers < 0 {
-		fail(w, errors.New("context must be positive and GPU layers nonnegative"))
-		return
+		return nil, errors.New("context must be positive and GPU layers nonnegative")
 	}
 	spec.Name = strings.TrimSpace(spec.Name)
 	if spec.Name == "" {
 		spec.Name = defaultModelName(spec.Model)
 	}
 	if spec.Name == "" || strings.Contains(spec.Name, ",") || strings.IndexFunc(spec.Name, unicode.IsControl) >= 0 || len(spec.Name) > 256 {
-		fail(w, errors.New("model name must be at most 256 characters and cannot contain commas or control characters"))
-		return
+		return nil, errors.New("model name must be at most 256 characters and cannot contain commas or control characters")
 	}
 	for _, run := range a.runs {
 		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Port == spec.Port {
-			fail(w, errors.New("that port is already used by a managed server"))
-			return
+			return nil, errors.New("that port is already used by a managed server")
 		}
 		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Name == spec.Name {
-			fail(w, errors.New("that model name is already used by a managed server"))
-			return
+			return nil, errors.New("that model name is already used by a managed server")
 		}
 	}
 	// These arguments belong to the manager so health checks and displayed model stay accurate.
 	blocked := map[string]bool{"-m": true, "--model": true, "-a": true, "--alias": true, "--host": true, "--port": true, "-hf": true, "--hf-repo": true, "--models-preset": true, "--models-dir": true}
 	for _, arg := range spec.Args {
 		if blocked[strings.SplitN(arg, "=", 2)[0]] {
-			fail(w, fmt.Errorf("%s is managed by opentambo", arg))
-			return
+			return nil, fmt.Errorf("%s is managed by opentambo", arg)
 		}
 	}
 	for key, value := range spec.Env {
 		if key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
-			fail(w, errors.New("invalid environment variable"))
-			return
+			return nil, errors.New("invalid environment variable")
 		}
 		if strings.HasPrefix(key, "LLAMA_ARG_") {
-			fail(w, errors.New("use launch arguments instead of LLAMA_ARG_* overrides"))
-			return
+			return nil, errors.New("use launch arguments instead of LLAMA_ARG_* overrides")
 		}
 	}
 	args := []string{"--model", model, "--ctx-size", strconv.Itoa(spec.Context), "--n-gpu-layers", strconv.Itoa(spec.GPULayers)}
@@ -132,8 +150,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	// (or would be) recorded in the namespace.
 	binaryPath, err := a.resolvedBinary()
 	if err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 	ctx, stop := context.WithCancel(a.ctx)
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
@@ -147,6 +164,14 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(k, "LLAMA_ARG_") {
 			env[k] = v
 		}
+	}
+	// Operator environment layers (#17): runtime.env applies to every child,
+	// launch_defaults.env to every launch; a per-launch spec.Env still wins.
+	for k, v := range a.runtimeEnv {
+		env[k] = v
+	}
+	for k, v := range a.launchEnv {
+		env[k] = v
 	}
 	for k, v := range spec.Env {
 		env[k] = v
@@ -167,8 +192,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = run.log
 	if err = cmd.Start(); err != nil {
 		stop()
-		fail(w, err)
-		return
+		return nil, err
 	}
 	run.PID = cmd.Process.Pid
 	a.runs[run.ID] = run
@@ -225,7 +249,7 @@ func (a *App) launch(w http.ResponseWriter, r *http.Request) {
 		_ = a.recordRunLocked(run)
 		stop()
 	}()
-	respond(w, 201, run.Run)
+	return run, nil
 }
 
 func (a *App) stopRun(w http.ResponseWriter, r *http.Request) {

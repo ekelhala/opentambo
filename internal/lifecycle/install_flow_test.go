@@ -46,8 +46,8 @@ func TestFreshInstallProvisionsStandardLayout(t *testing.T) {
 	unit := string(unitData)
 	for _, want := range []string{
 		"User=opentambo", "Group=opentambo",
-		"ExecStart=/usr/local/bin/opentambo --models /var/lib/opentambo/models",
-		"--data /var/lib/opentambo --llama-server /usr/local/bin/llama-server --listen 127.0.0.1:8090",
+		"ExecStart=/usr/local/bin/opentambo --config /etc/opentambo/config.yaml",
+		"test -r /etc/opentambo/config.yaml",
 		"KillMode=control-group", "TimeoutStopSec=15", "StandardOutput=journal",
 		"ReadWritePaths=/var/lib/opentambo",
 	} {

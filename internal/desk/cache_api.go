@@ -118,13 +118,7 @@ func (a *App) cacheSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		namespaces = append(namespaces, api.CacheNamespace{Namespace: store.namespace, Entries: entries, BytesUsed: used, MaxBytes: budget, Runs: belongs})
 	}
-	respond(w, 200, api.CacheReport{Namespaces: namespaces, Defaults: cacheDefaults()})
-}
-
-// cacheDefaults reports the server-side limits applied to unset PromptCache
-// options; state settings reuse the same source.
-func cacheDefaults() api.CacheDefaults {
-	return api.CacheDefaults{MaxBytes: defaultCacheMaxBytes, MaxEntryBytes: defaultCacheMaxEntryBytes, TTLSeconds: defaultCacheTTLSeconds, MinReuseTokens: defaultCacheMinReuseTokens}
+	respond(w, 200, api.CacheReport{Namespaces: namespaces, Defaults: a.cacheDefaults()})
 }
 
 func (a *App) cacheDelete(w http.ResponseWriter, r *http.Request) {

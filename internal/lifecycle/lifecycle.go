@@ -99,6 +99,11 @@ func (c Config) path(p string) string { return filepath.Join(c.Prefix, p) }
 // RecordPath is the root-controlled installation ownership record.
 func (c Config) RecordPath() string { return c.path(filepath.Join(c.EtcDir, "install.json")) }
 
+// ConfigPath is the operator configuration file the service reads (issue
+// #17). The installer seeds it when absent and never rewrites it; the
+// running service stores runtime changes in SQLite, not here.
+func (c Config) ConfigPath() string { return filepath.Join(c.EtcDir, "config.yaml") }
+
 // validate rejects relative paths, whitespace, and prefix escapes before
 // anything on the host is touched.
 func (c Config) validate() error {
