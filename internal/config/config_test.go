@@ -142,6 +142,9 @@ func TestParseRejections(t *testing.T) {
 		{"int as string", "schema_version: 1\nhttp:\n  listen: 8090\n", "quoted string"},
 		{"string as int", "schema_version: 1\ndownloads:\n  parallel: \"3\"\n", "cannot construct"},
 		{"string as bool", "schema_version: 1\nprompt_cache:\n  defaults:\n    enabled: \"yes\"\n", "true or false"},
+		{"empty document", "---\n", "configuration file is empty"},
+		{"null document", "null\n", "configuration file is empty"},
+		{"sequence item type", "schema_version: 1\nlaunch_defaults:\n  args: [\"--flash\", 3]\n", "quoted string"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,6 +190,19 @@ func TestResolveRejections(t *testing.T) {
 		{"gpu negative", "schema_version: 1\nlaunch_defaults:\n  gpu_layers: -1\n", "cannot be negative"},
 		{"empty arg", "schema_version: 1\nlaunch_defaults:\n  args: [\"\"]\n", "empty items"},
 		{"same dirs", "schema_version: 1\npaths:\n  data_dir: \"/srv/state\"\n  models_dir: \"/srv/state\"\n", "cannot be the same"},
+		{"listen no colon", "schema_version: 1\nhttp:\n  listen: \"8090\"\n", "host:port"},
+		{"launch env LLAMA_ARG", "schema_version: 1\nlaunch_defaults:\n  env:\n    LLAMA_ARG_HOST: \"x\"\n", "manager-owned"},
+		{"defaults ns bad size", "schema_version: 1\nprompt_cache:\n  defaults:\n    max_namespace_size: \"1G\"\n", "not a size"},
+		{"defaults entry bad size", "schema_version: 1\nprompt_cache:\n  defaults:\n    max_entry_size: \"1G\"\n", "not a size"},
+		{"defaults negative reuse", "schema_version: 1\nprompt_cache:\n  defaults:\n    min_reuse_tokens: -1\n", "cannot be negative"},
+		{"profile context zero", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    context_size: 0\n", "context_size must be positive"},
+		{"profile env LLAMA_ARG", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    env:\n      LLAMA_ARG_GPU: \"1\"\n", "manager-owned"},
+		{"profile env bad name", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    env:\n      \"A=B\": \"x\"\n", "invalid environment"},
+		{"profile ns bad size", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    prompt_cache:\n      max_namespace_size: \"1G\"\n", "not a size"},
+		{"profile entry bad size", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    prompt_cache:\n      max_entry_size: \"1G\"\n", "not a size"},
+		{"profile bad ttl", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    prompt_cache:\n      ttl: \"7d\"\n", "7d"},
+		{"profile negative reuse", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    prompt_cache:\n      min_reuse_tokens: -2\n", "cannot be negative"},
+		{"profile entry over ns", "schema_version: 1\nprofiles:\n  p:\n    model: \"m.gguf\"\n    port: 8080\n    prompt_cache:\n      max_namespace_size: \"1GiB\"\n      max_entry_size: \"2GiB\"\n", "cannot exceed max_namespace_size"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -250,6 +266,65 @@ runtime:
 	}
 }
 
+func TestProfileInheritsAndOverridesLaunchDefaults(t *testing.T) {
+	eff := resolve(t, `
+schema_version: 1
+launch_defaults:
+  context_size: 4096
+  gpu_layers: 9
+  env:
+    SHARED: "host"
+prompt_cache:
+  defaults:
+    min_reuse_tokens: 64
+profiles:
+  big:
+    model: "m.gguf"
+    port: 8081
+    gpu_layers: 0
+    prompt_cache:
+      min_reuse_tokens: 128
+    autostart: true
+  plain:
+    model: "m.gguf"
+    port: 8082
+`)
+	big := eff.Profiles["big"]
+	if big.GPULayers != 0 || big.Context != 4096 {
+		t.Errorf("profile gpu_layers override not applied: %+v", big)
+	}
+	if big.Cache.MinReuseTokens != 128 {
+		t.Errorf("profile min_reuse_tokens = %d, want 128", big.Cache.MinReuseTokens)
+	}
+	if !big.Autostart {
+		t.Error("autostart not carried")
+	}
+	plain := eff.Profiles["plain"]
+	if plain.GPULayers != 9 {
+		t.Errorf("plain profile did not inherit gpu_layers: %+v", plain)
+	}
+	if plain.Env["SHARED"] != "host" {
+		t.Errorf("profile did not inherit launch_defaults.env: %v", plain.Env)
+	}
+	if plain.Cache.MinReuseTokens != 64 {
+		t.Errorf("plain profile did not inherit host cache defaults: %+v", plain.Cache)
+	}
+}
+
+func TestResolveWithoutFileDirUsesManualDataDir(t *testing.T) {
+	cfg, err := Parse([]byte("schema_version: 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eff, err := cfg.Resolve("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eff.DataDir != "./data" || eff.ModelsDir != "data/models" {
+		t.Errorf("empty file dir = %q %q, want ./data paths", eff.DataDir, eff.ModelsDir)
+	}
+}
+
 func TestParseSize(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -262,7 +337,7 @@ func TestParseSize(t *testing.T) {
 			t.Errorf("ParseSize(%q) = %d, %v", tc.in, got, err)
 		}
 	}
-	for _, bad := range []string{"", "10", "10GB", "10 gib", "-1GiB", "8388608TiB", "1MB"} {
+	for _, bad := range []string{"", "10", "10GB", "10 gib", "-1GiB", "8388608TiB", "1MB", "9223372036854775808B"} {
 		if _, err := ParseSize(bad); err == nil {
 			t.Errorf("ParseSize(%q) accepted", bad)
 		}

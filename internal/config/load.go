@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ type Discovery struct {
 
 // Selected reports the chosen file path and whether selection was explicit
 // (flag or environment). ok is false when no file applies (manual mode).
-func (d Discovery) Selected() (string, bool, error) {
+func (d Discovery) Selected() (string, bool) {
 	getenv := d.Env
 	if getenv == nil {
 		getenv = os.Getenv
@@ -35,15 +34,15 @@ func (d Discovery) Selected() (string, bool, error) {
 		sys = SystemPath
 	}
 	if d.ConfigFlag != "" {
-		return d.ConfigFlag, true, nil
+		return d.ConfigFlag, true
 	}
 	if env := getenv("OPENTAMBO_CONFIG"); env != "" {
-		return env, true, nil
+		return env, true
 	}
 	if _, err := os.Stat(sys); err == nil {
-		return sys, false, nil
+		return sys, false
 	}
-	return "", false, nil
+	return "", false
 }
 
 // Load selects, reads, parses and resolves the configuration. When no file
@@ -51,10 +50,7 @@ func (d Discovery) Selected() (string, bool, error) {
 // built-in defaults. Explicit files that are missing or unreadable are
 // reported as errors.
 func (d Discovery) Load() (*Effective, error) {
-	path, _, err := d.Selected()
-	if err != nil {
-		return nil, err
-	}
+	path, _ := d.Selected()
 	if path == "" {
 		return nil, nil
 	}
@@ -78,6 +74,3 @@ func LoadFile(path string) (*Effective, error) {
 	eff.Path = filepath.Clean(path)
 	return eff, nil
 }
-
-// ErrNoFile reports that no configuration file applies.
-var ErrNoFile = errors.New("no configuration file selected")

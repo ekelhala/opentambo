@@ -218,51 +218,12 @@ func (e *Effective) resolveProfiles(c *Config) error {
 	e.Profiles = map[string]EffectiveProfile{}
 	ports := map[int]string{}
 	for name, p := range c.Profiles {
-		if !profileNameRe.MatchString(name) {
-			return fmt.Errorf("profiles.%s: name must match %s (letters, digits, dot, dash, underscore)", name, profileNameRe.String())
-		}
-		if p.Model == nil || *p.Model == "" {
-			return fmt.Errorf("profiles.%s.model is required", name)
-		}
-		if err := validateModelRef(name, *p.Model); err != nil {
+		if err := validateProfileIdentity(name, p, ports); err != nil {
 			return err
 		}
-		if p.Port == nil {
-			return fmt.Errorf("profiles.%s.port is required", name)
-		}
-		if *p.Port < 1024 || *p.Port > 65535 {
-			return fmt.Errorf("profiles.%s.port must be between 1024 and 65535 (got %d)", name, *p.Port)
-		}
-		if other, dup := ports[*p.Port]; dup {
-			return fmt.Errorf("profiles.%s.port %d collides with profile %s", name, *p.Port, other)
-		}
-		ports[*p.Port] = name
-		ep := EffectiveProfile{
-			Name: name, Model: *p.Model, Port: *p.Port,
-			Context: e.Launch.ContextSize, GPULayers: e.Launch.GPULayers,
-			Args:  append([]string{}, e.Launch.Args...),
-			Env:   copyEnv(e.Launch.Env),
-			Cache: e.Cache,
-		}
-		if err := validateLaunchScalars(p.ContextSize, p.GPULayers, p.Args, "profiles."+name); err != nil {
+		ep, err := e.profilePolicy(name, p)
+		if err != nil {
 			return err
-		}
-		if p.ContextSize != nil {
-			ep.Context = *p.ContextSize
-		}
-		if p.GPULayers != nil {
-			ep.GPULayers = *p.GPULayers
-		}
-		if p.Args != nil {
-			ep.Args = append([]string{}, *p.Args...)
-		}
-		if err := mergeEnv(ep.Env, p.Env, "profiles."+name+".env"); err != nil {
-			return err
-		}
-		if p.PromptCache != nil {
-			if err := e.applyProfileCache(&ep, name, p.PromptCache); err != nil {
-				return err
-			}
 		}
 		if p.Autostart != nil {
 			ep.Autostart = *p.Autostart
@@ -270,6 +231,64 @@ func (e *Effective) resolveProfiles(c *Config) error {
 		e.Profiles[name] = ep
 	}
 	return nil
+}
+
+// validateProfileIdentity checks the name, model reference and port of a
+// declared profile, registering the port so two profiles can never claim it.
+func validateProfileIdentity(name string, p Profile, ports map[int]string) error {
+	if !profileNameRe.MatchString(name) {
+		return fmt.Errorf("profiles.%s: name must match %s (letters, digits, dot, dash, underscore)", name, profileNameRe.String())
+	}
+	if p.Model == nil || *p.Model == "" {
+		return fmt.Errorf("profiles.%s.model is required", name)
+	}
+	if err := validateModelRef(name, *p.Model); err != nil {
+		return err
+	}
+	if p.Port == nil {
+		return fmt.Errorf("profiles.%s.port is required", name)
+	}
+	if *p.Port < 1024 || *p.Port > 65535 {
+		return fmt.Errorf("profiles.%s.port must be between 1024 and 65535 (got %d)", name, *p.Port)
+	}
+	if other, dup := ports[*p.Port]; dup {
+		return fmt.Errorf("profiles.%s.port %d collides with profile %s", name, *p.Port, other)
+	}
+	ports[*p.Port] = name
+	return nil
+}
+
+// profilePolicy resolves one profile against the host defaults: scalars and
+// args replace, env merges, cache fields inherit per-field.
+func (e *Effective) profilePolicy(name string, p Profile) (EffectiveProfile, error) {
+	ep := EffectiveProfile{
+		Name: name, Model: *p.Model, Port: *p.Port,
+		Context: e.Launch.ContextSize, GPULayers: e.Launch.GPULayers,
+		Args:  append([]string{}, e.Launch.Args...),
+		Env:   copyEnv(e.Launch.Env),
+		Cache: e.Cache,
+	}
+	if err := validateLaunchScalars(p.ContextSize, p.GPULayers, p.Args, "profiles."+name); err != nil {
+		return ep, err
+	}
+	if p.ContextSize != nil {
+		ep.Context = *p.ContextSize
+	}
+	if p.GPULayers != nil {
+		ep.GPULayers = *p.GPULayers
+	}
+	if p.Args != nil {
+		ep.Args = append([]string{}, *p.Args...)
+	}
+	if err := mergeEnv(ep.Env, p.Env, "profiles."+name+".env"); err != nil {
+		return ep, err
+	}
+	if p.PromptCache != nil {
+		if err := e.applyProfileCache(&ep, name, p.PromptCache); err != nil {
+			return ep, err
+		}
+	}
+	return ep, nil
 }
 
 // rebuildLaunch is intentionally absent: profile scalars are applied inline
@@ -316,11 +335,7 @@ func pick[T any](d *CacheDefaults, get func(*CacheDefaults) *T) *T {
 
 func sizeOr(v *string, def, field string) (int64, error) {
 	if v == nil {
-		n, err := ParseSize(def)
-		if err != nil {
-			return 0, fmt.Errorf("%s: %w", field, err)
-		}
-		return n, nil
+		v = &def
 	}
 	n, err := ParseSize(*v)
 	if err != nil {

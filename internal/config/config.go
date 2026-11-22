@@ -95,7 +95,7 @@ func Parse(data []byte) (*Config, error) {
 	if err := yaml.Load(data, &root); err != nil {
 		return nil, fmt.Errorf("parse configuration: %w", err)
 	}
-	if root.Kind == 0 {
+	if root.Kind == 0 || len(root.Content) == 0 || root.Content[0].Tag == "!!null" {
 		return nil, errors.New("configuration file is empty")
 	}
 	if err := rejectNulls(&root, ""); err != nil {
@@ -105,7 +105,7 @@ func Parse(data []byte) (*Config, error) {
 	if err := root.Load(cfg, yaml.WithKnownFields(), yaml.WithUniqueKeys()); err != nil {
 		return nil, fmt.Errorf("configuration is invalid: %w", err)
 	}
-	if err := rejectTypedScalars(&root, reflectShape()); err != nil {
+	if err := rejectTypedScalars(root.Content[0], reflectShape()); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -189,33 +189,16 @@ func mergeShapes(a, b map[string]*shape) map[string]*shape {
 	return m
 }
 
-func expectedTag(kind string) string {
-	switch kind {
-	case "string":
-		return "!!str"
-	case "integer":
-		return "!!int"
-	case "boolean":
-		return "!!bool"
-	}
-	return ""
-}
+var expectedTags = map[string]string{"string": "!!str", "integer": "!!int", "boolean": "!!bool"}
 
 // rejectTypedScalars walks the document against the declared shape so type
-// mismatches name the field path (without echoing secret values).
+// mismatches name the field path (without echoing secret values). It runs
+// only after a strict Load succeeded, so node kinds already agree with
+// their containers' shapes and explicit nulls were rejected beforehand.
 func rejectTypedScalars(n *yaml.Node, sh *shape) error {
-	if sh == nil {
-		return nil
-	}
-	if n.Kind == yaml.DocumentNode {
-		if len(n.Content) == 0 {
-			return nil
-		}
-		n = n.Content[0]
-	}
 	switch n.Kind {
 	case yaml.ScalarNode:
-		if sh.scalar != "" && n.Tag != "!!null" && n.Tag != expectedTag(sh.scalar) {
+		if sh.scalar != "" && n.Tag != expectedTags[sh.scalar] {
 			return fmt.Errorf("value must be %s like %s (line %d)",
 				map[string]string{"string": "a quoted string", "integer": "a plain number", "boolean": "true or false"}[sh.scalar],
 				map[string]string{"string": `"8090"`, "integer": `8192`, "boolean": `false`}[sh.scalar], n.Line)
@@ -229,18 +212,24 @@ func rejectTypedScalars(n *yaml.Node, sh *shape) error {
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(n.Content); i += 2 {
 			key, val := n.Content[i], n.Content[i+1]
-			var child *shape
-			if sh.children != nil {
-				child = sh.children[key.Value]
-			} else if sh.values != nil {
-				child = sh.values
-			}
-			if err := rejectTypedScalars(val, child); err != nil {
-				return fmt.Errorf("%s: %w", key.Value, err)
+			child := shapeFor(sh, key.Value)
+			if child != nil {
+				if err := rejectTypedScalars(val, child); err != nil {
+					return fmt.Errorf("%s: %w", key.Value, err)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// shapeFor resolves the child shape for a mapping key: named children for
+// structured sections, the shared value shape for string maps.
+func shapeFor(sh *shape, key string) *shape {
+	if sh.children != nil {
+		return sh.children[key]
+	}
+	return sh.values
 }
 
 // --- sizes and durations ---
