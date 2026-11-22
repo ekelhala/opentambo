@@ -36,11 +36,15 @@ func hashIdentityField(h io.Writer, kind, value string) {
 	_, _ = io.WriteString(h, "\n")
 }
 
-// verifiedCacheArchitectures lists GGUF architectures that passed a real
-// save/restart/restore/reuse test against a supported llama-server build.
-// Hybrid/recurrent and sliding-window architectures are NOT proven effective
-// and stay unsupported until validated (see README).
-var verifiedCacheArchitectures = map[string]bool{"llama": true}
+// Capability is decided by the runtime probe, not by architecture: the probe
+// measures that this exact model, binary, and launch configuration can save,
+// restore, and measurably reuse slot state (RunCache.probeSnapshotReuse). A
+// build or model combination that cannot produce that evidence is marked
+// unsupported at runtime and keeps the plain inference path. The
+// architecture string from GGUF metadata is therefore only an identity input,
+// never a gate — this is what lets hybrid/recurrent models (Qwen3-Next-style
+// SSM hybrids and friends) work without OpenTambo tracking llama.cpp's
+// architecture list by hand.
 
 // shardPattern matches the llama.cpp split GGUF naming convention.
 var shardPattern = regexp.MustCompile(`^(.*)-\d{5}-of-(\d{5})(\.gguf)$`)
@@ -53,9 +57,10 @@ type cacheLaunch struct {
 	store     *cacheStore
 }
 
-// preparePromptCache validates configuration, checks the model architecture
-// gate, and derives the namespace directory. It performs model file hashing
-// outside App.mu; only the small result crosses into the locked section.
+// preparePromptCache validates configuration and derives the namespace
+// directory. It performs model file hashing outside App.mu; only the small
+// result crosses into the locked section. Whether the child can actually
+// provide cache service is proven later by the runtime probe, not here.
 func (a *App) preparePromptCache(spec Launch) (*cacheLaunch, error) {
 	if err := a.validatePromptCache(spec.PromptCache); err != nil {
 		return nil, err
@@ -79,9 +84,6 @@ func (a *App) preparePromptCache(spec Launch) (*cacheLaunch, error) {
 	if architecture == "" {
 		return nil, fmt.Errorf("prompt cache needs the model architecture in GGUF metadata")
 	}
-	if !verifiedCacheArchitectures[architecture] {
-		return nil, fmt.Errorf("prompt cache does not support architecture %q yet: it has no validated save/restore/reuse evidence (supported: %s)", architecture, strings.Join(verifiedArchitectureNames(), ", "))
-	}
 	namespace, err := a.promptCacheIdentity(model, architecture, spec)
 	if err != nil {
 		return nil, err
@@ -93,15 +95,6 @@ func (a *App) preparePromptCache(spec Launch) (*cacheLaunch, error) {
 		return nil, fmt.Errorf("prompt cache directory: %w", err)
 	}
 	return &cacheLaunch{namespace: namespace, dir: dir, spec: normalized, store: store}, nil
-}
-
-func verifiedArchitectureNames() []string {
-	names := make([]string, 0, len(verifiedCacheArchitectures))
-	for name := range verifiedCacheArchitectures {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // resolvedBinary maps the configured llama-server executable to the absolute

@@ -23,27 +23,42 @@ import (
 // fake tokenizer keeps byte prefixes stable so prefix matching behaves like
 // the real engine for extended conversations, and generation always reports
 // the token count that apply-template+tokenize would produce (parity).
+//
+// The fake models KV state honestly for the probe's reuse measurement:
+// save records the slot's token count in the snapshot file, erase wipes the
+// live state, and restore re-arms it. With timings_per_token the response
+// reports timings.cache_n as the longest reused prefix of restored state —
+// so a probe that relied on live cache instead of snapshot restore would
+// see zero reuse, mirroring the real engine contract.
 type fakeLlama struct {
 	t       *testing.T
 	saveDir string
 
-	mu            sync.Mutex
-	files         map[string][]byte
-	slotTokens    int
-	inflight      int
-	maxInflight   int
-	saveCalls     int
-	restoreCalls  int
-	eraseCalls    int
-	generations   []map[string]any
-	rawBodies     [][]byte
-	failSave      bool
-	failRestore   bool
-	savePartial   bool          // write partial bytes to the temp file before failing
-	saveSlow      time.Duration // stall the save request (simulates an abandoned write)
-	saveNOverride int           // when set, report this n_saved instead of the token count
-	slotsFail     bool          // /slots returns an error (control API unreachable-ish)
-	slotsEmpty    bool          // /slots lists no slots at all (owned slot absent)
+	mu             sync.Mutex
+	files          map[string][]byte
+	slotTokens     int
+	restoredTokens int // live reusable prefix (re-armed by restore and generations)
+	inflight       int
+	maxInflight    int
+	saveCalls      int
+	restoreCalls   int
+	eraseCalls     int
+	generations    []map[string]any
+	rawBodies      [][]byte
+	failSave       bool
+	failRestore    bool
+	savePartial    bool          // write partial bytes to the temp file before failing
+	saveSlow       time.Duration // stall the save request (simulates an abandoned write)
+	saveNOverride  int           // when set, report this n_saved instead of the token count
+	slotsFail      bool          // /slots returns an error (control API unreachable-ish)
+	slotsEmpty     bool          // /slots lists no slots at all (owned slot absent)
+	omitTimings    bool          // never answer timings_per_token (older builds)
+	noReuse        bool          // restored state is accepted but never reused
+	failErase      bool          // every erase fails
+	eraseFailAfter int           // when > 0, erases fail after this many succeeded erases
+	saveZeroTokens bool          // save reports n_saved 0 (an empty slot)
+	timedGenFail   bool          // generations asking for timings_per_token fail (probe continuation)
+	timedGenJunk   bool          // generations asking for timings_per_token answer invalid JSON
 }
 
 func (f *fakeLlama) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +131,18 @@ func (f *fakeLlama) generate(w http.ResponseWriter, r *http.Request, fields map[
 	f.mu.Lock()
 	f.inflight--
 	f.slotTokens = len(tokens)
+	// A served generation leaves its own prompt live in the slot: later
+	// requests may reuse it exactly like the engine's in-place cache.
+	reuse := 0
+	if f.noReuse {
+		f.restoredTokens = 0
+	} else {
+		reuse = f.restoredTokens
+		if reuse > len(tokens) {
+			reuse = len(tokens)
+		}
+		f.restoredTokens = len(tokens)
+	}
 	// Only proxy-forwarded requests carry a model name; the probe's own
 	// generation (without one) must not confuse forwarded-body assertions.
 	if _, hasModel := fields["model"]; hasModel {
@@ -123,10 +150,24 @@ func (f *fakeLlama) generate(w http.ResponseWriter, r *http.Request, fields map[
 	}
 	truncate, _ := fields["fake_truncate"].(bool)
 	fail, _ := fields["fake_fail"].(bool)
+	timingsWanted, _ := fields["timings_per_token"].(bool)
+	omit := f.omitTimings
+	timedFail := f.timedGenFail
+	timedJunk := f.timedGenJunk
 	f.mu.Unlock()
 	if fail {
 		w.WriteHeader(500)
 		_, _ = io.WriteString(w, `{"error":{"message":"backend failure"}}`)
+		return
+	}
+	if timingsWanted && timedFail {
+		w.WriteHeader(500)
+		_, _ = io.WriteString(w, `{"error":{"message":"generation failed"}}`)
+		return
+	}
+	if timingsWanted && timedJunk {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices": [`)
 		return
 	}
 	if stream, _ := fields["stream"].(bool); stream {
@@ -137,10 +178,14 @@ func (f *fakeLlama) generate(w http.ResponseWriter, r *http.Request, fields map[
 		}
 		return
 	}
-	writeJSON(w, map[string]any{
+	response := map[string]any{
 		"choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": "ok"}}},
 		"usage":   map[string]any{"prompt_tokens": len(tokens), "completion_tokens": 1},
-	})
+	}
+	if timingsWanted && !omit {
+		response["timings"] = map[string]any{"cache_n": reuse, "prompt_ms": 1.0, "predicted_ms": 1.0}
+	}
+	writeJSON(w, response)
 }
 
 func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields map[string]any) {
@@ -155,6 +200,7 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		partial := f.savePartial
 		slow := f.saveSlow
 		override := f.saveNOverride
+		zero := f.saveZeroTokens
 		f.mu.Unlock()
 		if fail {
 			w.WriteHeader(500)
@@ -190,7 +236,9 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		f.files[name] = contents
 		f.mu.Unlock()
 		n := tokens
-		if override > 0 {
+		if zero {
+			n = 0
+		} else if override > 0 {
 			n = override
 		}
 		writeJSON(w, map[string]any{"n_saved": n, "n_written": len(contents), "timings": map[string]any{"save_ms": 1.5}})
@@ -210,13 +258,22 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		_, _ = fmt.Sscanf(string(contents), "snapshot:%d", &tokens)
 		f.mu.Lock()
 		f.slotTokens = tokens
+		f.restoredTokens = tokens
 		f.mu.Unlock()
 		writeJSON(w, map[string]any{"n_restored": tokens, "timings": map[string]any{"restore_ms": 1.0}})
 	case "erase":
 		f.mu.Lock()
 		f.eraseCalls++
-		f.slotTokens = 0
+		fail := f.failErase || (f.eraseFailAfter > 0 && f.eraseCalls > f.eraseFailAfter)
+		if !fail {
+			f.slotTokens = 0
+			f.restoredTokens = 0
+		}
 		f.mu.Unlock()
+		if fail {
+			w.WriteHeader(500)
+			return
+		}
 		writeJSON(w, map[string]any{"n_erased": 1})
 	default:
 		http.NotFound(w, r)
@@ -386,6 +443,95 @@ func TestProbeRejectsParityMismatch(t *testing.T) {
 	summary := rc.summary()
 	if summary.Status != "unsupported" || !strings.Contains(summary.Reason, "parity") {
 		t.Fatalf("parity mismatch not detected: %+v", summary)
+	}
+}
+
+// runProbeAgainstFake runs the capability probe against a configurable fake
+// child and returns the resulting summary.
+func runProbeAgainstFake(t *testing.T, configure func(*fakeLlama)) CacheSummary {
+	t.Helper()
+	a := testApp(t, "unused")
+	dir := filepath.Join(t.TempDir(), "ns")
+	store, err := newCacheStore(cacheTestDB(t), dir, "ns", 1<<20, 1<<19, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeLlama{t: t, saveDir: store.dir, files: map[string][]byte{}}
+	if configure != nil {
+		configure(fake)
+	}
+	server := httptest.NewServer(fake)
+	defer server.Close()
+	_, portString, _ := net.SplitHostPort(server.Listener.Addr().String())
+	port, _ := strconv.Atoi(portString)
+	rc := newRunCache(PromptCache{Enabled: true}, "ns", newLlamaClient(port, a.cacheClient), store)
+	rc.Probe(context.Background())
+	return rc.summary()
+}
+
+// TestProbeRejectsBuildWithoutTimings: a child that never answers
+// timings_per_token gives the probe no reuse evidence, so the cache must be
+// marked unsupported rather than trusted blindly.
+func TestProbeRejectsBuildWithoutTimings(t *testing.T) {
+	summary := runProbeAgainstFake(t, func(f *fakeLlama) { f.omitTimings = true })
+	if summary.Status != "unsupported" || !strings.Contains(summary.Reason, "timings.cache_n") {
+		t.Fatalf("missing reuse timings not detected: %+v", summary)
+	}
+}
+
+// TestProbeRejectsSilentRestore is the hybrid-model failure shape the old
+// static allow-list could not see: save and restore succeed end-to-end, but
+// the restored state is never reused and every request would silently
+// re-prefill. The measured probe must mark the cache unsupported.
+func TestProbeRejectsSilentRestore(t *testing.T) {
+	summary := runProbeAgainstFake(t, func(f *fakeLlama) { f.noReuse = true })
+	if summary.Status != "unsupported" || !strings.Contains(summary.Reason, "did not reuse the prompt") {
+		t.Fatalf("silent restore without reuse not detected: %+v", summary)
+	}
+}
+
+// TestProbePassesWithMeasuredReuse pins the positive half of the evidence
+// gate: the probe only reports ready when the erased-then-restored slot
+// actually skips prompt work on the continuation turn.
+func TestProbePassesWithMeasuredReuse(t *testing.T) {
+	summary := runProbeAgainstFake(t, nil)
+	if summary.Status != "ready" {
+		t.Fatalf("a reusing child must classify as ready: %+v", summary)
+	}
+}
+
+// TestProbeReportsSnapshotRoundTripFailures walks every failure point of the
+// measured-evidence round-trip. Each must land on `unsupported` with a
+// reason naming the step that failed, and the error-recovery erases must
+// behave (a restore failure on a slot that cannot be cleared is the worst
+// shape and must say so).
+func TestProbeReportsSnapshotRoundTripFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		configure func(*fakeLlama)
+		want      string
+	}{
+		{"save", func(f *fakeLlama) { f.failSave = true }, "slot save failed"},
+		{"empty-save", func(f *fakeLlama) { f.saveZeroTokens = true }, "captured no tokens"},
+		{"erase", func(f *fakeLlama) { f.failErase = true }, "slot erase failed"},
+		{"restore", func(f *fakeLlama) { f.failRestore = true }, "slot restore failed:"},
+		{"restore-uncleared-slot", func(f *fakeLlama) {
+			f.failRestore = true
+			f.eraseFailAfter = 1 // the pre-restore erase succeeds, the recovery erase fails
+		}, "could not be cleared"},
+		{"continuation-request", func(f *fakeLlama) { f.timedGenFail = true }, "reuse probe generation failed"},
+		{"continuation-json", func(f *fakeLlama) { f.timedGenJunk = true }, "probe continuation"},
+		{"post-probe-erase", func(f *fakeLlama) { f.eraseFailAfter = 1 }, "slot erase failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			summary := runProbeAgainstFake(t, tc.configure)
+			if summary.Status != "unsupported" {
+				t.Fatalf("injected %s failure must mark the cache unsupported: %+v", tc.name, summary)
+			}
+			if !strings.Contains(summary.Reason, tc.want) {
+				t.Errorf("%s: reason %q must mention %q", tc.name, summary.Reason, tc.want)
+			}
+		})
 	}
 }
 

@@ -525,9 +525,12 @@ components:
       type: string
       description: >-
         Prompt-cache coordinator state. checking: the capability probe is
-        still running; ready: save/restore are operational; unsupported: the
-        build cannot persist cache state and requests run uncached; error: a
-        slot-safety failure stopped the coordinator (manual restart needed).
+        still running; ready: the probe measured save, restore, and real
+        prompt reuse on this exact model, binary, and configuration;
+        unsupported: the combination lacks that reuse evidence (including
+        architectures whose restored state is never reused) and requests
+        run uncached; error: a slot-safety failure stopped the coordinator
+        (manual restart needed).
       enum: [checking, ready, unsupported, error]
     CacheStats:
       type: object

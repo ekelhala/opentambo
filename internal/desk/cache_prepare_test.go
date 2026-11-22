@@ -24,10 +24,11 @@ func writeArchitectureGGUF(t *testing.T, path, architecture string) {
 	}
 }
 
-// TestPreparePromptCacheRejectsUnsupportedArchitecture is the issue #19
-// gate: architectures without validated save/restore/reuse evidence must
-// never reach a launch, and the error must name the supported set.
-func TestPreparePromptCacheRejectsUnsupportedArchitecture(t *testing.T) {
+// TestPreparePromptCacheAcceptsAnyArchitecture pins the measured-capability
+// design: no architecture is rejected at launch. Hybrid/recurrent models
+// reach the child and the runtime probe decides. Only the identity input
+// (the architecture string itself) is required.
+func TestPreparePromptCacheAcceptsAnyArchitecture(t *testing.T) {
 	a := testApp(t, filepath.Join(t.TempDir(), "llama-server"))
 	if err := os.WriteFile(a.binary, []byte("binary"), 0755); err != nil {
 		t.Fatal(err)
@@ -35,16 +36,29 @@ func TestPreparePromptCacheRejectsUnsupportedArchitecture(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(a.models, "org"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	writeArchitectureGGUF(t, filepath.Join(a.models, "org", "model.gguf"), "qwen2")
-	_, err := a.preparePromptCache(Launch{
-		Model: "org/model.gguf", Context: 8192, GPULayers: 99,
-		PromptCache: &PromptCache{Enabled: true},
-	})
-	if err == nil {
-		t.Fatal("an unvalidated architecture must stay unsupported")
+	for _, architecture := range []string{"llama", "qwen2", "qwen3next", "lfm2", "kimi_linear"} {
+		name := "model-" + architecture + ".gguf"
+		writeArchitectureGGUF(t, filepath.Join(a.models, "org", name), architecture)
+		prepared, err := a.preparePromptCache(Launch{
+			Model: "org/" + name, Context: 8192, GPULayers: 99,
+			PromptCache: &PromptCache{Enabled: true},
+		})
+		if err != nil {
+			t.Errorf("%s: architecture must not be gated at launch: %v", architecture, err)
+			continue
+		}
+		if prepared.namespace == "" {
+			t.Errorf("%s: missing namespace", architecture)
+		}
 	}
-	if !strings.Contains(err.Error(), "qwen2") || !strings.Contains(err.Error(), "llama") {
-		t.Errorf("error must name the rejected and supported architectures: %v", err)
+	// An empty architecture string is still rejected: it is a mandatory
+	// identity input, and its absence means the metadata is unusable.
+	writeArchitectureGGUF(t, filepath.Join(a.models, "org", "blank.gguf"), "")
+	if _, err := a.preparePromptCache(Launch{
+		Model: "org/blank.gguf", Context: 8192, GPULayers: 99,
+		PromptCache: &PromptCache{Enabled: true},
+	}); err == nil || !strings.Contains(err.Error(), "architecture") {
+		t.Fatalf("blank architecture must report the missing identity input, got %v", err)
 	}
 }
 
