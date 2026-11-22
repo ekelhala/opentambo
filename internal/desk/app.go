@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ekelhala/opentambo/internal/config"
 	"github.com/ekelhala/opentambo/internal/desk/api"
 )
 
@@ -59,11 +60,59 @@ type App struct {
 	client               *http.Client
 	proxyTransport       *http.Transport
 	cacheClient          *http.Client
+	// Operator configuration (#17): resolved YAML defaults applied to
+	// launches, or the built-in defaults in manual mode.
+	cacheDef     api.CacheDefaults
+	cacheEnabled bool
+	runtimeEnv   map[string]string
+	launchEnv    map[string]string
+	launchArgs   []string
+	contextSize  int
+	gpuLayers    int
+	maxTotal     int64
+	profilesCfg  map[string]config.EffectiveProfile
+}
+
+func copyStringMap(src map[string]string) map[string]string {
+	m := make(map[string]string, len(src))
+	for k, v := range src {
+		m[k] = v
+	}
+	return m
 }
 
 func New(models, binary, data string, parallel int) (*App, error) {
+	return NewWithConfig(models, binary, data, parallel, nil)
+}
+
+// NewWithConfig applies the resolved operator configuration (#17). A nil
+// cfg keeps manual-mode behavior: built-in cache limits and no extra
+// child-process environment.
+func NewWithConfig(models, binary, data string, parallel int, cfg *config.Effective) (*App, error) {
 	if parallel < 1 || parallel > 32 {
 		return nil, errors.New("downloads must be between 1 and 32")
+	}
+	cacheDef := builtinCacheDefaults()
+	runtimeEnv := map[string]string{}
+	launchEnv := map[string]string{}
+	contextSize, gpuLayers := 0, 0
+	cacheEnabled := false
+	maxTotal := int64(32 << 30)
+	if cfg != nil {
+		cacheDef.MaxBytes = cfg.Cache.MaxNamespace
+		cacheDef.MaxEntryBytes = cfg.Cache.MaxEntry
+		cacheDef.TTLSeconds = cfg.Cache.TTLSec
+		cacheDef.MinReuseTokens = int(cfg.Cache.MinReuseTokens)
+		cacheEnabled = cfg.Cache.Enabled
+		maxTotal = cfg.MaxTotalBytes
+		runtimeEnv = copyStringMap(cfg.RuntimeEnv)
+		launchEnv = copyStringMap(cfg.Launch.Env)
+		if cfg.Launch.ContextSize != config.DefaultContextSize {
+			contextSize = cfg.Launch.ContextSize
+		}
+		if cfg.Launch.GPULayers != config.DefaultGPULayers {
+			gpuLayers = cfg.Launch.GPULayers
+		}
 	}
 	var err error
 	models, err = filepath.Abs(models)
@@ -85,6 +134,17 @@ func New(models, binary, data string, parallel int) (*App, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{models: models, binary: binary, data: data, jobs: map[string]*Job{}, runs: map[string]*Run{}, profiles: map[string]Launch{}, cacheStores: map[string]*cacheStore{}, slots: make(chan struct{}, parallel), ctx: ctx, cancel: cancel, client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ResponseHeaderTimeout: 30 * time.Second}}}
+	a.cacheDef = cacheDef
+	a.runtimeEnv = runtimeEnv
+	a.launchEnv = launchEnv
+	a.contextSize = contextSize
+	a.gpuLayers = gpuLayers
+	a.cacheEnabled = cacheEnabled
+	a.maxTotal = maxTotal
+	if cfg != nil {
+		a.profilesCfg = cfg.Profiles
+		a.launchArgs = append([]string{}, cfg.Launch.Args...)
+	}
 	a.proxyTransport = &http.Transport{ResponseHeaderTimeout: 10 * time.Minute}
 	// Control-plane calls to children (slot save/restore) can legitimately
 	// take a while on large KV caches; they never go through a proxy.
@@ -343,7 +403,7 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 			Models:              a.models,
 			Binary:              a.binary,
 			ParallelDownloads:   cap(a.slots),
-			PromptCacheDefaults: promptCacheDefaults(),
+			PromptCacheDefaults: a.promptCacheDefaults(),
 		},
 		Models:   models,
 		Catalog:  catalogFrom(models),
@@ -355,8 +415,10 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 
 // promptCacheDefaults reports the server-side limits applied to unset
 // PromptCache launch options (settings.prompt_cache_defaults and /api/cache).
-func promptCacheDefaults() api.PromptCacheDefaults {
-	return api.PromptCacheDefaults{Enabled: false, MaxBytes: defaultCacheMaxBytes, MaxEntryBytes: defaultCacheMaxEntryBytes, TTLSeconds: defaultCacheTTLSeconds, MinReuseTokens: defaultCacheMinReuseTokens}
+// With an operator configuration file these carry its prompt_cache.defaults
+// values; manual mode keeps the built-in limits and a disabled default.
+func (a *App) promptCacheDefaults() api.PromptCacheDefaults {
+	return api.PromptCacheDefaults{Enabled: a.cacheEnabled, MaxBytes: a.cacheDef.MaxBytes, MaxEntryBytes: a.cacheDef.MaxEntryBytes, TTLSeconds: a.cacheDef.TTLSeconds, MinReuseTokens: a.cacheDef.MinReuseTokens}
 }
 
 func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {

@@ -43,36 +43,59 @@ var (
 	cacheSettleWait = 5 * time.Second
 )
 
-func normalizedPromptCache(c PromptCache) PromptCache {
+// builtinCacheDefaults reports the compiled-in limits used when no operator
+// configuration supplies prompt_cache defaults.
+func builtinCacheDefaults() api.CacheDefaults {
+	return api.CacheDefaults{MaxBytes: defaultCacheMaxBytes, MaxEntryBytes: defaultCacheMaxEntryBytes, TTLSeconds: defaultCacheTTLSeconds, MinReuseTokens: defaultCacheMinReuseTokens}
+}
+
+// cacheDefaults is the operator-tuned source for limits applied to unset
+// PromptCache options; manual mode (no configuration file) keeps the
+// built-in values.
+func (a *App) cacheDefaults() api.CacheDefaults { return a.cacheDef }
+
+func normalizePromptCacheWith(defs api.CacheDefaults, c PromptCache) PromptCache {
 	spec := PromptCache{Enabled: c.Enabled}
-	spec.MaxBytes = defaultCacheMaxBytes
+	spec.MaxBytes = defs.MaxBytes
 	if c.MaxBytes > 0 {
 		spec.MaxBytes = c.MaxBytes
 	}
-	spec.MaxEntryBytes = defaultCacheMaxEntryBytes
+	spec.MaxEntryBytes = defs.MaxEntryBytes
 	if c.MaxEntryBytes > 0 {
 		spec.MaxEntryBytes = c.MaxEntryBytes
 	}
-	spec.TTLSeconds = defaultCacheTTLSeconds
+	spec.TTLSeconds = defs.TTLSeconds
 	if c.TTLSeconds > 0 {
 		spec.TTLSeconds = c.TTLSeconds
 	}
-	spec.MinReuseTokens = defaultCacheMinReuseTokens
+	spec.MinReuseTokens = defs.MinReuseTokens
 	if c.MinReuseTokens > 0 {
 		spec.MinReuseTokens = c.MinReuseTokens
 	}
 	return spec
 }
 
+func normalizedPromptCache(c PromptCache) PromptCache {
+	return normalizePromptCacheWith(builtinCacheDefaults(), c)
+}
+
+// normalizedPromptCache resolves unset limits against the operator's
+// configured defaults (issue #17).
+func (a *App) normalizedPromptCache(c PromptCache) PromptCache {
+	return normalizePromptCacheWith(a.cacheDef, c)
+}
+
 // validatePromptCache rejects nonsensical configurations before a child starts.
-func validatePromptCache(c *PromptCache) error {
+// validatePromptCache rejects nonsensical configurations before a child
+// starts, resolving unset limits against the operator's configured defaults.
+func (a *App) validatePromptCache(c *PromptCache) error {
 	if c == nil || !c.Enabled {
 		return nil
 	}
 	if c.MaxBytes < 0 || c.MaxEntryBytes < 0 || c.TTLSeconds < 0 || c.MinReuseTokens < 0 {
 		return errors.New("prompt cache limits cannot be negative")
 	}
-	spec := normalizedPromptCache(*c)
+	spec := a.normalizedPromptCache(*c)
 	if spec.MaxEntryBytes > spec.MaxBytes {
 		return errors.New("prompt cache max_entry_bytes cannot exceed max_bytes")
 	}
