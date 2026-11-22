@@ -51,6 +51,13 @@ Open `http://127.0.0.1:8090`. Defaults are `./models`, `./data`, and
 `llama-server` from PATH. Run it as the user who owns the models, without
 sudo, and only one instance per data directory.
 
+The same settings can live in a versioned YAML operator configuration —
+`--config`, `OPENTAMBO_CONFIG`, or `/etc/opentambo/config.yaml` when it
+exists — which also carries prompt-cache defaults and declarative launch
+profiles; explicit flags win over the file. Validate any edit with
+`opentambo config check`. [Deployment](docs/deployment.md) documents the
+full schema, precedence and profile inheritance.
+
 > **No authentication, by design.** The panel can delete models and execute
 > your configured runtime with custom arguments and environment variables.
 > Keep the listener on loopback and put it behind your own access policy
