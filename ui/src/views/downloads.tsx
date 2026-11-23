@@ -153,7 +153,11 @@ function DownloadForm({
             </Button>
           </div>
           {quants && quants.length > 0 && (
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5" role="list" aria-label="Quantizations in the repository">
+            <div
+              className="grid grid-cols-[minmax(0,1fr)] gap-1.5"
+              role="list"
+              aria-label="Quantizations in the repository"
+            >
               {quants.map((quant) => (
                 <button
                   key={`${quant.label}-${quant.family}-${quant.files[0]?.name}`}

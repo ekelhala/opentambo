@@ -28,7 +28,10 @@ export function GatewayView({ state }: { state: State }) {
           </div>
           {serving.length ? (
             serving.map((run) => (
-              <div key={run.id} className="grid grid-cols-[minmax(0,1fr)] gap-1.5 border-t border-[var(--t-line-soft)] pt-3.5">
+              <div
+                key={run.id}
+                className="grid grid-cols-[minmax(0,1fr)] gap-1.5 border-t border-[var(--t-line-soft)] pt-3.5"
+              >
                 <div className="route">
                   <span className="method">POST</span> /v1/chat/completions <span className="arrow">→</span>{' '}
                   <span className="text-[var(--t-text)]">"{run.launch.name}"</span> <span className="arrow">→</span>{' '}
