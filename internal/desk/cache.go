@@ -376,23 +376,29 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	defer cancel()
 	saved, err := rc.client.saveSlot(saveCtx, chatSlot, tmpName)
 	if err != nil {
-		rc.store.EndTempWrite(entryID)
-		_ = rc.store.RemoveTemp(tmpName)
+		// Remove whatever the partial write produced and release the
+		// reservation together, in that order: releasing the bytes first
+		// would authorize another write over a file still on disk.
+		_ = rc.store.AbortTempWrite(entryID)
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		return
 	}
-	// The reservation covered the write window; Publish re-accounts the
-	// committed snapshot size itself.
-	rc.store.EndTempWrite(entryID)
+	// The reservation stays live through Publish, which transfers it into
+	// committed entry bytes; ending it here would let another run reserve
+	// the same disk while the .tmp file still occupies it (issue #24).
 	if saved.NSaved < len(req.tokens) {
 		// The saved state does not provably cover the indexed prefix.
-		_ = rc.store.RemoveTemp(tmpName)
+		_ = rc.store.AbortTempWrite(entryID)
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		_ = rc.client.eraseSlot(saveCtx, chatSlot)
 		return
 	}
 	if _, err := rc.store.Publish(entryID, req.tokens, saved.NSaved); err != nil {
-		_ = rc.store.RemoveTemp(tmpName)
+		// Publish releases the reservation when it hands the bytes to a
+		// committed entry and leaves them accounted for when removal of a
+		// rejected file failed; this covers the paths that never reached
+		// the handoff (issue #24).
+		_ = rc.store.AbortTempWrite(entryID)
 		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
 		return
 	}
