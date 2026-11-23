@@ -22,10 +22,10 @@ export function DownloadsView({
   const active = state.jobs.filter((j) => j.status === 'downloading')
   const now = active.reduce((sum, j) => sum + j.bytes_per_second, 0)
   return (
-    <div className="grid gap-3.5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5">
       <h2 className="pane-title">Downloads</h2>
       <p className="pane-lede">Pull GGUF files from public Hugging Face repos into the shelf.</p>
-      <div className="grid gap-3.5 lg:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5 lg:grid-cols-3">
         <DownloadForm
           className="lg:col-span-2"
           slots={`${active.length} / ${state.settings.parallel_downloads}`}
@@ -101,11 +101,11 @@ function DownloadForm({
     <div className={`panel ${className ?? ''}`}>
       <div className="panel-head">
         <span className="panel-title">New download</span>
-        <span className="panel-meta">public repos · pick a quantization, shards handled for you</span>
+        <span className="panel-meta max-sm:hidden">public repos · pick a quantization, shards handled for you</span>
       </div>
       <div className="panel-body">
         <form
-          className="grid gap-3"
+          className="grid grid-cols-[minmax(0,1fr)] gap-3"
           onSubmit={(event) => {
             event.preventDefault()
             onSubmit({
@@ -153,7 +153,7 @@ function DownloadForm({
             </Button>
           </div>
           {quants && quants.length > 0 && (
-            <div className="grid gap-1.5" role="list" aria-label="Quantizations in the repository">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5" role="list" aria-label="Quantizations in the repository">
               {quants.map((quant) => (
                 <button
                   key={`${quant.label}-${quant.family}-${quant.files[0]?.name}`}

@@ -65,34 +65,36 @@ export function FilesView({
               {state.catalog.length} {state.catalog.length === 1 ? 'model' : 'models'} · {state.models.length} GGUF
               files
             </span>
-            <span className="mono text-xs text-[var(--t-text-3)]">scan of {state.settings.models}</span>
+            <span className="mono max-sm:hidden text-xs text-[var(--t-text-3)]">scan of {state.settings.models}</span>
           </div>
           {repos.length ? (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Quantization</th>
-                  <th className="w-24 text-right">Size</th>
-                  <th className="hidden w-20 sm:table-cell">Files</th>
-                  <th className="hidden w-32 sm:table-cell">Modified</th>
-                  <th className="w-44">Status</th>
-                  <th className="w-48" />
-                </tr>
-              </thead>
-              <tbody>
-                {repos.map((model) => (
-                  <RepoRows
-                    key={model.repo}
-                    model={model}
-                    runningAlias={runningAlias}
-                    expanded={expanded}
-                    setExpanded={setExpanded}
-                    onLaunch={onLaunch}
-                    onDelete={onDelete}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Quantization</th>
+                    <th className="w-24 text-right">Size</th>
+                    <th className="hidden w-20 sm:table-cell">Files</th>
+                    <th className="hidden w-32 sm:table-cell">Modified</th>
+                    <th className="hidden w-44 sm:table-cell">Status</th>
+                    <th className="w-28" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {repos.map((model) => (
+                    <RepoRows
+                      key={model.repo}
+                      model={model}
+                      runningAlias={runningAlias}
+                      expanded={expanded}
+                      setExpanded={setExpanded}
+                      onLaunch={onLaunch}
+                      onDelete={onDelete}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
               {state.catalog.length ? 'No models match' : 'No models yet. Queue a download.'}
@@ -185,12 +187,13 @@ function QuantRows({
               </span>
             )}
             {quant.projection && <span className="badge badge-idle shrink-0">vision mmproj</span>}
+            {alias && <span className="badge badge-ok shrink-0 sm:hidden">running</span>}
           </button>
         </td>
         <td className="num text-right text-xs">{bytes(quant.size)}</td>
         <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{quant.shards}</td>
         <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(quant.modified)}</td>
-        <td>
+        <td className="hidden sm:table-cell">
           {alias ? (
             <span className="badge badge-ok">running · {alias}</span>
           ) : quant.projection ? (
@@ -224,7 +227,7 @@ function QuantRows({
             <td className="num text-right text-xs">{bytes(file.size)}</td>
             <td className="hidden sm:table-cell" />
             <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(file.modified)}</td>
-            <td />
+            <td className="hidden sm:table-cell" />
             <td>
               <div className="flex justify-end">
                 <Button variant="danger-ghost" size="sm" disabled={!!alias} onClick={() => onDelete(file)}>

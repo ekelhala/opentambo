@@ -49,7 +49,7 @@ export function ServerDetail({
 
   if (!run) {
     return (
-      <div className="grid gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <Button variant="secondary" size="sm" className="w-fit" onClick={() => navigate('servers')}>
           <BackIcon /> Servers
         </Button>
@@ -85,7 +85,7 @@ export function ServerDetail({
   const command = run.command.join(' ')
 
   return (
-    <div className="grid gap-3.5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5">
       <div className="srv">
         <div className="srv-head">
           <Button variant="secondary" size="sm" onClick={() => navigate('servers')}>
@@ -113,12 +113,14 @@ export function ServerDetail({
           <Button
             variant="secondary"
             size="sm"
+            aria-label="Copy command"
             onClick={() => {
               navigator.clipboard.writeText(command)
               toast.success('Command copied')
             }}
           >
-            <CopyIcon /> Copy command
+            <CopyIcon />
+            <span className="max-sm:hidden">Copy command</span>
           </Button>
         </div>
         {health && <p className="mono mt-2.5 text-xs break-all text-[var(--t-text-2)]">{health}</p>}
@@ -175,12 +177,12 @@ export function ServerDetail({
 
       {run.cache?.requested && <CachePanel run={run} />}
 
-      <div className="grid gap-3.5 lg:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5 lg:grid-cols-3">
         <div className="panel lg:col-span-1">
           <div className="panel-head">
             <span className="panel-title">Launch configuration</span>
           </div>
-          <div className="panel-body grid gap-3 text-xs">
+          <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-3 text-xs">
             <div className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1">
               <span className="text-[var(--t-text-3)]">Model</span>
               <span className="mono break-all">{run.launch.model}</span>
@@ -221,7 +223,7 @@ export function ServerDetail({
 
 function ArgBlock({ label, value, wrap }: { label: string; value: string; wrap?: boolean }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
       <span className="text-[var(--t-text-3)]">{label}</span>
       <pre className={wrap ? 'well wrap' : 'well nowrap'}>{value}</pre>
     </div>

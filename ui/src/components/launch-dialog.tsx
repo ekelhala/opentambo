@@ -132,7 +132,7 @@ export function LaunchDialog({
           <DialogTitle className="dialog-title">Launch server</DialogTitle>
           <p className="dialog-lede">Your binary, your arguments. The command below is exactly what runs.</p>
         </DialogHeader>
-        <form onSubmit={submit} className="grid gap-4">
+        <form onSubmit={submit} className="grid grid-cols-[minmax(0,1fr)] gap-4">
           <div className="field">
             <label htmlFor="launch-model">Model</label>
             <Select value={model} onValueChange={setModel} required>
