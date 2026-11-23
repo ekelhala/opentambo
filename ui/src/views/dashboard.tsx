@@ -42,7 +42,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         : `peak ${peak} jobs`
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <div className="stat-grid">
         <Stat
           k="Active servers"
@@ -68,7 +68,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
           u={`/ ${state.settings.parallel_downloads} slots`}
           f={bandwidth > 0 ? `≈ ${bytes(bandwidth)}/s now` : 'idle'}
           aside={
-            <span className="block h-7 w-[110px] shrink-0">
+            <span className="block h-7 w-[110px] shrink-0 max-sm:hidden">
               <Sparkline values={history.bandwidth} />
             </span>
           }
@@ -81,7 +81,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-3">
         <section className="panel lg:col-span-2">
           <div className="panel-head">
             <span className="panel-title">Activity</span>
@@ -115,7 +115,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
           </div>
           <div className="panel-body">
             {disk > 0 ? (
-              <div className="grid gap-3.5">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5">
                 <div className="progress stacked" aria-hidden="true">
                   {diskSegments(state).map((s) => (
                     <i
@@ -125,7 +125,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
                     />
                   ))}
                 </div>
-                <div className="grid gap-2 text-xs">
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-2 text-xs">
                   {diskSegments(state).map((s) => (
                     <div key={s.label} className="flex items-center gap-2 text-[var(--t-text-2)]">
                       <span className="size-2 shrink-0" style={{ background: s.color }} />
@@ -150,7 +150,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
           <span className="panel-title">Manager</span>
           <span className="panel-meta">capacity in use</span>
         </div>
-        <div className="panel-body grid gap-x-8 md:grid-cols-3">
+        <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-x-8 md:grid-cols-3">
           <MeterRow
             label="Servers"
             value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
@@ -176,7 +176,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
 
       <div>
         <div className="sub-label mb-3.5">Servers on this host</div>
-        <div className="grid gap-2.5">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2.5">
           {running.length ? (
             running.map((run) => <ServerRow key={run.id} run={run} />)
           ) : (

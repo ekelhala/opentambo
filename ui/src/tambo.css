@@ -354,6 +354,7 @@ a {
 /* ============================================================ form controls */
 .field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
 }
 .field > label,
@@ -766,6 +767,7 @@ a {
 }
 .panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
@@ -779,6 +781,8 @@ a {
   font: 400 var(--t-fs-12) / 1.2 var(--t-font-mono);
   color: var(--t-text-3);
   font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .panel-body {
   padding: 16px;
@@ -860,6 +864,12 @@ a {
 }
 
 /* ============================================================ tables */
+/* horizontal safety net: wide tables scroll inside their panel instead of
+   pushing the page sideways on narrow screens */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -1167,6 +1177,11 @@ a {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 56px minmax(0, 1fr) auto;
   }
+  .masthead {
+    /* keep mark, wordmark and the three controls inside a phone masthead */
+    gap: 8px;
+    padding: 0 12px;
+  }
   .rail {
     grid-row: 3;
     grid-column: 1;
@@ -1199,11 +1214,34 @@ a {
   .pane {
     padding: 18px 16px 28px;
   }
+  .dialog-content {
+    padding: 16px;
+  }
+  .stat .v {
+    font-size: var(--t-fs-24);
+  }
+  .stat .f-row {
+    flex-wrap: wrap;
+  }
   .dl-row {
+    /* the filename column owns the row; status, repo and ETA drop out
+       below the 720px mark — the bar colour and stats line carry it */
     grid-template-columns: minmax(0, 1fr) 40px;
   }
-  .dl-row > :nth-child(n + 3):nth-child(-n + 4) {
+  .dl-row > :nth-child(n + 2):nth-child(-n + 4) {
     display: none;
+  }
+  .dl-stats {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+}
+@media (max-width: 560px) {
+  .stat {
+    padding: 12px 14px;
+  }
+  .rail .item {
+    padding: 8px 6px;
   }
 }
 

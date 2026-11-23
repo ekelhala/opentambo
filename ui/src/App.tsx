@@ -131,7 +131,7 @@ export default function App() {
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         >
           {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
-          {theme === 'dark' ? 'Dark' : 'Light'}
+          <span className="max-sm:hidden">{theme === 'dark' ? 'Dark' : 'Light'}</span>
         </button>
       </header>
 
@@ -181,7 +181,8 @@ export default function App() {
         </div>
       </main>
 
-      <Toaster theme={theme} />
+      {/* clear of the bottom navigation rail on phones */}
+      <Toaster theme={theme} mobileOffset={{ bottom: 76 }} />
       {state && draft && (
         <LaunchDialog
           key={JSON.stringify(draft)}
@@ -232,7 +233,7 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
           </DialogDescription>
         </DialogHeader>
         {state && (
-          <div className="grid gap-2 text-xs">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 text-xs">
             <SettingRow label="Models" value={state.settings.models} />
             <SettingRow label="llama-server" value={state.settings.binary} />
             <SettingRow label="Downloads" value={`${state.settings.parallel_downloads} parallel`} />
