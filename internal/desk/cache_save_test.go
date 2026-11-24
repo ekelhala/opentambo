@@ -135,6 +135,43 @@ func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
 	}
 }
 
+func TestCacheOversizedChildOutputAbortsReservationThroughFinish(t *testing.T) {
+	// Issue #24 at the RunCache level: the child writes a file past the
+	// per-entry limit, Publish rejects it, and Finish's abort must remove
+	// the oversized temp file and release the reservation together —
+	// leaving committed snapshots, the temp pool and the budget intact.
+	fx := newCacheFixture(t)
+	fx.post(t, chatBody(`[{"role":"user","content":"first healthy turn"}]`))
+	summary := fx.rc.summary()
+	if summary.Stats.Saves != 1 {
+		t.Fatalf("expected one committed snapshot, got %d", summary.Stats.Saves)
+	}
+	entriesBefore, _, _ := fx.rc.store.Summary()
+
+	fx.fake.mu.Lock()
+	fx.fake.savePadBytes = 600_000 // beyond the store's 512 KiB per-entry limit
+	fx.fake.mu.Unlock()
+	fx.post(t, chatBody(`[{"role":"user","content":"second turn producing an oversized snapshot"}]`))
+
+	if leftovers := tmpSnapshotFiles(t, fx.fake.saveDir); len(leftovers) != 0 {
+		t.Fatalf("rejected oversized snapshot left %d temporary file(s): %v", len(leftovers), leftovers)
+	}
+	if bins, _ := filepath.Glob(filepath.Join(fx.fake.saveDir, "*.bin")); len(bins) != len(entriesBefore) {
+		t.Fatalf("rejected oversized snapshot left %d stray binaries: %v", len(bins), bins)
+	}
+	summary = fx.rc.summary()
+	if summary.Stats.Saves != 1 || summary.Stats.SaveFailures != 1 {
+		t.Fatalf("expected saves=1 save_failures=1, got saves=%d save_failures=%d", summary.Stats.Saves, summary.Stats.SaveFailures)
+	}
+	entriesAfter, _, _ := fx.rc.store.Summary()
+	if len(entriesAfter) != len(entriesBefore) {
+		t.Fatalf("rejected oversized snapshot disturbed committed snapshots: %d -> %d", len(entriesBefore), len(entriesAfter))
+	}
+	if got := reservedPoolBytes(t, fx.rc.store); got != 0 {
+		t.Fatalf("Finish left %d bytes reserved after aborting the rejected write", got)
+	}
+}
+
 func TestCacheStoreTempEstimateIsWorstCase(t *testing.T) {
 	dir := t.TempDir()
 	// Issue #23 reproduction: a 130-byte budget with a 100-byte per-entry

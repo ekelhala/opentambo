@@ -86,12 +86,16 @@ type cacheStore struct {
 
 // tempReservation books budget for a temporary snapshot the caller is about
 // to ask llama-server to write. The exact size is unknown beforehand, so the
-// reservation uses the store's worst-case bound (TempEstimate) and is either
-// absorbed by Publish (success), released by EndTempWrite (failure), or
-// dropped once older than the save deadline it guards (an abandoned write).
+// reservation uses the store's worst-case bound (TempEstimate). It ends by
+// being transferred into committed entry bytes by Publish (success) or by
+// removing the write's files and releasing the bytes together
+// (AbortTempWrite / maintenance). publishing marks a reservation whose
+// snapshot is mid-Publication: maintenance must not lapse it while the
+// handoff into a committed entry is underway (issue #24).
 type tempReservation struct {
-	bytes int64
-	at    time.Time
+	bytes      int64
+	at         time.Time
+	publishing bool
 }
 
 func newCacheStore(db *sql.DB, dir, namespace string, maxBytes, maxEntryBytes int64, ttl time.Duration) (*cacheStore, error) {
@@ -415,7 +419,22 @@ func (s *cacheStore) mutate(f func() error) error {
 // Publish stores a snapshot that llama-server wrote to <id>.tmp inside the
 // store directory. The temp file is size-checked and checksummed, renamed
 // into place, and the metadata commit happens atomically. A failure at any
-// point leaves no entry behind; the budget accounting is restored.
+// point leaves no entry and no occupied-but-unaccounted bytes behind: the
+// file the write left (temp or unpublished binary) is removed before its
+// accounting is released.
+//
+// When the entry carries a live reservation from BeginTempWrite, publication
+// owns the reservation-to-entry handoff (issue #24): the reservation is
+// held and marked in-flight for the whole operation, then transferred into
+// the committed entry's bytes inside the same critical section, so no other
+// writer can book the bytes of a snapshot that still occupies disk between
+// the write and its publication. The reservation must cover the actual file
+// size and is never stacked on top of reserveLocked, so publication neither
+// double-counts nor evicts committed entries for bytes it already owns.
+//
+// Publication without a prior reservation stays supported (explicit,
+// unreserved path): the actual size is then booked like any in-flight
+// publish, evicting unpinned entries to fit.
 func (s *cacheStore) Publish(entryID string, tokens []int32, savedTokens int) (*CacheEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -424,38 +443,77 @@ func (s *cacheStore) Publish(entryID string, tokens []int32, savedTokens int) (*
 	if err != nil {
 		return nil, fmt.Errorf("snapshot temp file: %w", err)
 	}
+	res, reserved := s.temps[entryID]
+	if reserved {
+		// Maintenance cannot lapse this reservation (or sweep its file)
+		// while the handoff runs, even if the save deadline passed while
+		// llama-server was writing the snapshot.
+		res.publishing = true
+	}
 	if info.Size() > s.maxEntryBytes {
-		_ = os.Remove(tmpPath)
+		// A child wrote past the per-entry limit (the documented
+		// limitation in BeginTempWrite). The file goes before its
+		// accounting does, reserved or not.
+		if reserved {
+			_ = s.abortTempLocked(entryID)
+		} else {
+			_ = os.Remove(tmpPath)
+		}
 		return nil, fmt.Errorf("snapshot of %d bytes exceeds the per-entry limit", info.Size())
 	}
-	if !s.reserveLocked(info.Size()) {
+	if !reserved && !s.reserveLocked(info.Size()) {
 		_ = os.Remove(tmpPath)
 		return nil, errors.New("no snapshot disk budget available")
 	}
-	published := false
-	defer func() {
-		if !published {
+	entry, err := s.publishLocked(entryID, tmpPath, info.Size(), tokens, savedTokens, reserved)
+	if reserved {
+		res.publishing = false
+		if err != nil {
+			// Centralized abort: remove what the failed publication left
+			// in the store directory (temp or unpublished binary), then
+			// release its bytes. If removal fails the reservation is kept,
+			// so occupied bytes are never treated as free; maintenance
+			// retries the coordinated cleanup at the save deadline.
+			_ = s.abortTempLocked(entryID)
+		}
+	} else {
+		// The unreserved booking covered the in-flight publish either way.
+		s.releaseLocked(info.Size())
+		if err != nil {
 			_ = os.Remove(filepath.Join(s.dir, entryID+".bin"))
 		}
-		// The reserved bytes become committed entry bytes on success.
-		s.releaseLocked(info.Size())
-	}()
-	if err = os.Rename(tmpPath, filepath.Join(s.dir, entryID+".bin")); err != nil {
+	}
+	return entry, err
+}
+
+// publishLocked renames, verifies and commits the snapshot. Publish has
+// already bounded the size and booked budget: with a reservation it first
+// validates that the reservation covers the actual file, and on success the
+// committed row replaces the reservation in the same critical section
+// (issue #24).
+func (s *cacheStore) publishLocked(entryID, tmpPath string, size int64, tokens []int32, savedTokens int, reserved bool) (*CacheEntry, error) {
+	if reserved {
+		if res := s.temps[entryID]; res != nil && size > res.bytes {
+			return nil, fmt.Errorf("snapshot of %d bytes exceeds its %d-byte write reservation", size, res.bytes)
+		}
+	}
+	binPath := filepath.Join(s.dir, entryID+".bin")
+	if err := os.Rename(tmpPath, binPath); err != nil {
 		return nil, err
 	}
-	checksum, err := hashFile(filepath.Join(s.dir, entryID+".bin"))
+	checksum, err := hashFile(binPath)
 	if err != nil {
 		return nil, err
 	}
 	now := s.now()
-	entry := &CacheEntry{ID: entryID, Namespace: s.namespace, Filename: entryID + ".bin", Checksum: checksum, PromptTokens: tokens, SavedTokens: savedTokens, Bytes: info.Size(), CreatedAt: now, LastUsedAt: now}
+	entry := &CacheEntry{ID: entryID, Namespace: s.namespace, Filename: entryID + ".bin", Checksum: checksum, PromptTokens: tokens, SavedTokens: savedTokens, Bytes: size, CreatedAt: now, LastUsedAt: now}
 	if err = s.mutate(func() error {
 		s.enforceLocked(now)
 		var used int64
 		for _, e := range s.entries {
 			used += e.Bytes
 		}
-		if used+info.Size() > s.maxBytes {
+		if used+size > s.maxBytes {
 			return errors.New("no snapshot disk budget available")
 		}
 		s.entries[entry.ID] = entry
@@ -463,7 +521,15 @@ func (s *cacheStore) Publish(entryID string, tokens []int32, savedTokens int) (*
 	}); err != nil {
 		return nil, err
 	}
-	published = true
+	if reserved {
+		// Handoff complete: the committed row now accounts for the bytes
+		// the reservation held. It leaves the temp pool here, not before
+		// the row exists, so no writer observes neither representation.
+		if res := s.temps[entryID]; res != nil {
+			s.releaseLocked(res.bytes)
+			delete(s.temps, entryID)
+		}
+	}
 	return entry, nil
 }
 
@@ -662,10 +728,13 @@ func (s *cacheStore) TempEstimate() int64 {
 // #15 for durable accounting). The reservation covers every size Publish
 // would accept; a child misbehaving beyond that produces an oversized file
 // that Publish rejects and unlinks, but the transient write itself is only
-// bounded by the child, not enforced here. The reservation must end with
-// EndTempWrite once the snapshot is published or the write is abandoned;
-// reservations whose save deadline has passed are dropped by maintenance so
-// a crashed writer cannot hold budget forever.
+// bounded by the child, not enforced here. A reservation ends when Publish
+// transfers it into committed entry bytes without a gap (issue #24) or when
+// AbortTempWrite discards a failed or abandoned write together with its
+// bytes; reservations whose save deadline has passed are cleaned up by
+// maintenance, file removal and accounting release together, so a crashed
+// writer can neither hold budget forever nor leave bytes on disk
+// unaccounted for.
 func (s *cacheStore) BeginTempWrite(entryID string, estimate int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -686,6 +755,10 @@ func (s *cacheStore) BeginTempWrite(entryID string, estimate int64) bool {
 }
 
 // EndTempWrite releases the budget booked by BeginTempWrite for the entry.
+// It only releases accounting: callers that must also discard the write's
+// files (a failed or abandoned save) use AbortTempWrite so the removal and
+// the release stay coordinated — occupied bytes are never returned to the
+// pool before the bytes they occupy leave the volume (issue #24).
 func (s *cacheStore) EndTempWrite(entryID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -697,6 +770,50 @@ func (s *cacheStore) endTempWriteLocked(entryID string) {
 		s.releaseLocked(res.bytes)
 		delete(s.temps, entryID)
 	}
+}
+
+// AbortTempWrite ends a reserved snapshot write that will not be published:
+// it removes everything the write left in the store directory (<id>.tmp and
+// an unpublished <id>.bin) and releases the reservation booked by
+// BeginTempWrite only once those files are provably gone. If a removal
+// fails the accounting is kept and the error is returned; maintenance then
+// retries the coordinated cleanup at the save deadline instead of treating
+// occupied bytes as free (issue #24). It is idempotent: a second call with
+// the files already gone succeeds without touching accounting twice.
+func (s *cacheStore) AbortTempWrite(entryID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.abortTempLocked(entryID)
+}
+
+// abortTempLocked implements AbortTempWrite under the caller-held mutex.
+func (s *cacheStore) abortTempLocked(entryID string) error {
+	res, ok := s.temps[entryID]
+	if !ok {
+		return nil
+	}
+	if err := s.dropWriteFilesLocked(entryID); err != nil {
+		return err
+	}
+	s.releaseLocked(res.bytes)
+	delete(s.temps, entryID)
+	return nil
+}
+
+// dropWriteFilesLocked removes the files a reserved snapshot write can have
+// left behind: the temporary file and a binary whose publication failed. A
+// committed entry's file is never touched. Missing files are success; the
+// first real removal error is returned so callers keep the accounting.
+func (s *cacheStore) dropWriteFilesLocked(entryID string) error {
+	for _, name := range []string{entryID + ".tmp", entryID + ".bin"} {
+		if name == entryID+".bin" && s.entries[entryID] != nil {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // RemoveTemp deletes a temporary snapshot file inside the store directory.
@@ -740,15 +857,22 @@ func (s *cacheStore) Summary() (entries []PublicCacheEntry, used, budget int64) 
 // Pinned entries are never removed — expired or invalid files of in-flight
 // restores are dropped once Done releases the final pin (see Done). Files of
 // dropped entries are removed. Write reservations past their save deadline
-// belong to writers that abandoned the snapshot and are released; temp files
-// no live write owns are swept once older than the save deadline so an
-// interrupted write cannot linger in a long-lived process.
+// belong to writers that abandoned the snapshot: their files are removed
+// first and the bytes released only once the removal succeeded, so a
+// completed-but-unpublished snapshot can never end up occupying disk with no
+// reservation covering it (issue #24). Temp files no live write owns are
+// swept once older than the save deadline so an interrupted write cannot
+// linger in a long-lived process.
 func (s *cacheStore) enforceLocked(now time.Time) {
 	for entryID, res := range s.temps {
-		if now.Sub(res.at) > cacheSaveWait {
-			s.releaseLocked(res.bytes)
-			delete(s.temps, entryID)
+		if res.publishing || now.Sub(res.at) <= cacheSaveWait {
+			continue
 		}
+		if err := s.dropWriteFilesLocked(entryID); err != nil {
+			continue // keep accounting while the bytes still occupy disk
+		}
+		s.releaseLocked(res.bytes)
+		delete(s.temps, entryID)
 	}
 	if items, err := os.ReadDir(s.dir); err == nil {
 		for _, item := range items {

@@ -57,6 +57,7 @@ type fakeLlama struct {
 	failErase      bool          // every erase fails
 	eraseFailAfter int           // when > 0, erases fail after this many succeeded erases
 	saveZeroTokens bool          // save reports n_saved 0 (an empty slot)
+	savePadBytes   int           // write this many extra bytes past the snapshot (an oversized child output)
 	timedGenFail   bool          // generations asking for timings_per_token fail (probe continuation)
 	timedGenJunk   bool          // generations asking for timings_per_token answer invalid JSON
 }
@@ -201,6 +202,7 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 		slow := f.saveSlow
 		override := f.saveNOverride
 		zero := f.saveZeroTokens
+		pad := f.savePadBytes
 		f.mu.Unlock()
 		if fail {
 			w.WriteHeader(500)
@@ -227,6 +229,11 @@ func (f *fakeLlama) slotAction(w http.ResponseWriter, r *http.Request, fields ma
 			_ = os.WriteFile(filepath.Join(f.saveDir, name), contents[:len(contents)/2], 0600)
 			w.WriteHeader(500)
 			return
+		}
+		if pad > 0 {
+			// A child that writes past the per-entry limit: the reported
+			// coverage is honest but the file on disk is oversized.
+			contents = append(contents, make([]byte, pad)...)
 		}
 		if err := os.WriteFile(filepath.Join(f.saveDir, name), contents, 0600); err != nil {
 			w.WriteHeader(500)
