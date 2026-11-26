@@ -711,15 +711,14 @@ func (s *cacheStore) TempEstimate() int64 {
 	return s.maxEntryBytes
 }
 
-// BeginTempWrite books budget against the store limits for a snapshot write
-// the caller is about to request from llama-server. The exact size is not
-// known beforehand, so the caller passes the store's worst-case estimate
-// (see TempEstimate); a write that cannot fit without evicting committed
-// entries is refused up front instead of letting the child fill the volume
-// outside the configured budget. Refusing never evicts: committed snapshots
-// stay safe against a write that may fail or be abandoned, so a full cache
-// rejects new saves until TTL/LRU maintenance frees room or a reservation
-// lapses. Simultaneous writes in a shared namespace each book the full
+// BeginTempWrite is the low-level non-evicting reservation: it books budget
+// against the store limits for a snapshot write the caller is about to
+// request from llama-server, and refuses anything that would not fit
+// without evicting committed entries. The production save path uses
+// BeginTempWriteEvicting, the default pressure-evicting admission
+// (issue #35); this helper stays available for callers that must never
+// destroy cached state, and its guarantees are the same minus reclamation.
+// Simultaneous writes in a shared namespace each book the full
 // worst-case estimate, so committed plus reserved bytes always bound every
 // write the store would publish.
 //
@@ -754,86 +753,132 @@ func (s *cacheStore) BeginTempWrite(entryID string, estimate int64) bool {
 	return true
 }
 
-// BeginTempWriteReplacing is the save-path reservation that keeps snapshot
-// refreshes flowing under budget pressure (issue #33). Like BeginTempWrite
-// it books the worst-case estimate against committed plus already-reserved
-// bytes, but when the estimate no longer fits it reclaims the committed
-// snapshots the incoming verified state supersedes: entries whose indexed
-// prompt tokens are a leading slice of the incoming tokens (equality
-// included — a re-serialization of the same prefix). Other conversations'
-// snapshots are never victims here; reclaiming those under pressure is
-// issue #35's rolling-cache policy.
+// admissionOutcome reports how much committed space the admission reclaim
+// actually freed, split by policy group. Removals are counted when their
+// file is gone even if a later removal in the same reclaim fails: a
+// successfully evicted snapshot stays evicted (issue #35).
+type admissionOutcome struct {
+	replacements int // superseded same-conversation states reclaimed
+	evictions    int // unrelated snapshots evicted under pressure
+}
+
+// admissionRefusal marks a save-admission refusal caused by the reservation
+// size itself or by capacity that no eligible victim could cover: a budget
+// refusal. Filesystem and metadata faults return ordinary errors so the
+// save statistics can tell "a healthy cache ran out of room" apart from a
+// broken volume (issue #35).
+type admissionRefusal struct{ msg string }
+
+func (r *admissionRefusal) Error() string { return r.msg }
+
+// BudgetRefused reports whether err is a save-admission refusal caused by
+// reservation size or capacity rather than a storage fault.
+func BudgetRefused(err error) bool {
+	var refusal *admissionRefusal
+	return errors.As(err, &refusal)
+}
+
+// BeginTempWriteEvicting is the production save-path reservation and the
+// default rolling-cache admission (issue #35). Like BeginTempWrite it books
+// the worst-case estimate against committed plus already-reserved bytes;
+// when the estimate no longer fits it makes room in a fixed priority:
+// expired entries and abandoned writes are cleaned first under the
+// persisted authoritative policy (that cleanup is not a pressure eviction),
+// then the committed snapshots the incoming verified state supersedes
+// (issue #33: an old indexed prompt must be a leading slice of the
+// incoming tokens, equality included, not a guessed conversation id or a
+// mere shared prefix), then the remaining unpinned snapshots — other
+// conversations are candidates too. Within each group victims go
+// least-recently-used first with entry ID as a deterministic tie-breaker,
+// and only the shortest prefix that covers the shortfall is removed; the
+// cache is never emptied toward a headroom target. TTL disabled does not
+// disable pressure eviction, and restore touches keep moving entries to
+// the fresh end of the order.
 //
-// The policy is all-or-nothing: an invalid or oversized estimate, or
-// superseded capacity that cannot cover the shortfall, is refused with an
-// actionable error before any file is removed and nothing is booked. On
-// success the victims' files are removed and their metadata committed
-// before the reservation is taken, so the invariant that committed bytes
-// plus reservations never exceed maxBytes holds at the instant the write is
-// admitted. Pinned entries (live restores) are never reclaimed. A removal
-// error aborts the admission conservatively: the reservation is not booked,
-// and any file already removed leaves its entry to be dropped by the next
-// reload, so occupied bytes are never unaccounted and free bytes are never
-// over-authorized. Returns the number of superseded snapshots reclaimed.
-func (s *cacheStore) BeginTempWriteReplacing(entryID string, estimate int64, tokens []int32) (int, error) {
+// Preflight against the live in-memory state guarantees a refusal for
+// insufficient capacity deletes nothing: an invalid or oversized estimate,
+// or capacity held by pins and live reservations that the eligible victims
+// cannot cover, is refused with an actionable *admissionRefusal and books
+// nothing. Filesystem removals are not transactionally reversible: when a
+// reclaim stops at a removal or metadata fault, the snapshots it already
+// evicted stay evicted, their counts stay in the returned outcome, the
+// reservation is not booked, and the entries whose files are gone are
+// dropped by the next reload, so occupied bytes are never unaccounted and
+// free bytes are never over-authorized. Entries pinned by live restores
+// and other writers' live reservations are never victims.
+func (s *cacheStore) BeginTempWriteEvicting(entryID string, estimate int64, tokens []int32) (admissionOutcome, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.endTempWriteLocked(entryID)
 	if estimate <= 0 || estimate > s.maxBytes {
-		return 0, fmt.Errorf("write reservation of %d bytes does not fit the %d-byte namespace budget", estimate, s.maxBytes)
+		return admissionOutcome{}, &admissionRefusal{fmt.Sprintf("write reservation of %d bytes does not fit the %d-byte namespace budget", estimate, s.maxBytes)}
 	}
-	shortfall := s.committedLocked() + s.reserved + estimate - s.maxBytes
-	if shortfall > 0 {
+	if shortfall := s.committedLocked() + s.reserved + estimate - s.maxBytes; shortfall > 0 {
 		// Preflight against the live in-memory state so a refusal that
 		// cannot succeed deletes nothing.
-		eligible := sumEntryBytes(s.supersededVictimsLocked(tokens))
+		eligible := sumEntryBytes(s.supersededVictimsLocked(tokens)) + sumEntryBytes(s.pressureVictimsLocked(tokens))
 		if eligible < shortfall {
-			return 0, fmt.Errorf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, superseded snapshots hold %d", estimate, shortfall, eligible)
+			return admissionOutcome{}, &admissionRefusal{fmt.Sprintf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, reclaimable snapshots hold %d", estimate, shortfall, eligible)}
 		}
 	}
-	reclaimed := 0
-	err := s.mutate(func() error {
-		shortfall = s.committedLocked() + s.reserved + estimate - s.maxBytes
-		if shortfall <= 0 {
-			return nil
-		}
-		n, freed, err := s.reclaimVictimsLocked(s.supersededVictimsLocked(tokens), shortfall)
-		reclaimed = n
-		if err != nil {
-			return err
-		}
-		if freed < shortfall {
-			return fmt.Errorf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, superseded snapshots freed %d before the state changed", estimate, shortfall, freed)
-		}
-		return nil
-	})
+	var outcome admissionOutcome
+	err := s.mutate(func() error { return s.admissionReclaimLocked(estimate, tokens, &outcome) })
 	if err != nil {
-		return 0, err
+		return outcome, err
 	}
 	s.reserved += estimate
 	s.temps[entryID] = &tempReservation{bytes: estimate, at: s.now()}
-	return reclaimed, nil
+	return outcome, nil
+}
+
+// admissionReclaimLocked runs inside mutate: it first applies the
+// authoritative expiry and abandoned-write cleanup, then removes the
+// priority-ordered victims that cover the current shortfall. A reclaimed
+// total that no longer covers the shortfall means the namespace changed
+// under a concurrent commit; that is a budget refusal, not a storage fault.
+func (s *cacheStore) admissionReclaimLocked(estimate int64, tokens []int32, outcome *admissionOutcome) error {
+	s.enforceLocked(s.now())
+	shortfall := s.committedLocked() + s.reserved + estimate - s.maxBytes
+	if shortfall <= 0 {
+		return nil
+	}
+	freed, err := s.reclaimVictimsLocked(s.supersededVictimsLocked(tokens), shortfall, &outcome.replacements)
+	if err != nil {
+		return err
+	}
+	if freed < shortfall {
+		more, err := s.reclaimVictimsLocked(s.pressureVictimsLocked(tokens), shortfall-freed, &outcome.evictions)
+		freed += more
+		if err != nil {
+			return err
+		}
+	}
+	if freed < shortfall {
+		return &admissionRefusal{fmt.Sprintf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, reclaimable snapshots freed %d before the state changed", estimate, shortfall, freed)}
+	}
+	return nil
 }
 
 // reclaimVictimsLocked removes victims in order until the freed bytes cover
-// shortfall, dropping their index entries. It stops at the first removal
-// error (the freed so-far bytes stay removed; the next reload reconciles
-// their entries), so callers must verify coverage before booking anything.
-func (s *cacheStore) reclaimVictimsLocked(victims []*CacheEntry, shortfall int64) (int, int64, error) {
-	reclaimed, freed := 0, int64(0)
+// shortfall, dropping their index entries and counting each removal into
+// counted. It stops at the first removal error (the freed so-far bytes stay
+// removed; the next reload reconciles their entries), so callers must
+// verify coverage before booking anything.
+func (s *cacheStore) reclaimVictimsLocked(victims []*CacheEntry, shortfall int64, counted *int) (int64, error) {
+	var freed int64
 	for _, v := range victims {
 		if freed >= shortfall {
 			break
 		}
 		if err := os.Remove(filepath.Join(s.dir, v.Filename)); err != nil && !os.IsNotExist(err) {
-			return reclaimed, freed, fmt.Errorf("reclaim snapshot %s: %w", v.ID, err)
+			return freed, fmt.Errorf("reclaim snapshot %s: %w", v.ID, err)
 		}
 		delete(s.entries, v.ID)
 		delete(s.invalid, v.ID)
 		freed += v.Bytes
-		reclaimed++
+		*counted++
 	}
-	return reclaimed, freed, nil
+	return freed, nil
 }
 
 // sumEntryBytes totals the committed bytes of the given entries.
@@ -854,12 +899,23 @@ func (s *cacheStore) committedLocked() int64 {
 	return used
 }
 
+// sortVictims orders eviction candidates least-recently-used first with
+// entry ID as a deterministic tie-breaker, so repeated admission attempts
+// converge on the same victim.
+func sortVictims(victims []*CacheEntry) {
+	sort.Slice(victims, func(i, j int) bool {
+		if !victims[i].LastUsedAt.Equal(victims[j].LastUsedAt) {
+			return victims[i].LastUsedAt.Before(victims[j].LastUsedAt)
+		}
+		return victims[i].ID < victims[j].ID
+	})
+}
+
 // supersededVictimsLocked lists the reclaimable snapshots the incoming
 // token sequence supersedes — unpinned entries whose verified indexed
 // prompt tokens are a leading slice of tokens (equality included) — in
-// least-recently-used order with entry ID as a deterministic tie-breaker.
-// The caller removes only the shortest prefix of this list that covers its
-// shortfall.
+// victim order. The caller removes only the shortest prefix of this list
+// that covers its shortfall.
 func (s *cacheStore) supersededVictimsLocked(tokens []int32) []*CacheEntry {
 	var victims []*CacheEntry
 	for _, e := range s.entries {
@@ -868,12 +924,23 @@ func (s *cacheStore) supersededVictimsLocked(tokens []int32) []*CacheEntry {
 		}
 		victims = append(victims, e)
 	}
-	sort.Slice(victims, func(i, j int) bool {
-		if !victims[i].LastUsedAt.Equal(victims[j].LastUsedAt) {
-			return victims[i].LastUsedAt.Before(victims[j].LastUsedAt)
+	sortVictims(victims)
+	return victims
+}
+
+// pressureVictimsLocked lists the second-priority admission candidates:
+// the unpinned snapshots the incoming state does not supersede — under
+// the default rolling-cache policy other conversations' snapshots are
+// evictable too (issue #35), taken least-recently-used first.
+func (s *cacheStore) pressureVictimsLocked(tokens []int32) []*CacheEntry {
+	var victims []*CacheEntry
+	for _, e := range s.entries {
+		if s.pins[e.ID] > 0 || tokensSupersede(e.PromptTokens, tokens) {
+			continue
 		}
-		return victims[i].ID < victims[j].ID
-	})
+		victims = append(victims, e)
+	}
+	sortVictims(victims)
 	return victims
 }
 

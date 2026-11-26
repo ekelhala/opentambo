@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Long prompts with disjoint openings exercise prefix matching honestly:
@@ -27,6 +28,12 @@ const promptB = "Zebra crossing patterns repeat along the boulevard outside the 
 	"The tram arrives seven minutes late again, brakes hissing against the platform edge. Somewhere a " +
 	"radio plays a brass tune while paint dries on the new benches. Children chase a red ball between " +
 	"the market stalls, laughing loudly, while their parents haggle over tomatoes and flatbread."
+
+const promptC = "High above the rooftops a slow freight train crosses the stone viaduct at dusk. Windows " +
+	"glow amber as the last light drains out of the sky behind the water tower. A cat watches from the " +
+	"fire escape, tail twitching at the rumble in the rails. Down in the courtyard a printer stacks wet " +
+	"sheets while a kettle whistles twice, forgotten on the tiny stove. The night porter unlocks the " +
+	"side door, nods to the baker's boy, and hangs his lamp on its hook by the stairs."
 
 // timedCompletion runs a chat completion with per-token timings enabled.
 // Reuse evidence must come from the backend's own counters: llama.cpp
@@ -269,6 +276,156 @@ func runStatus(m *manager, id string) string {
 		}
 	}
 	return ""
+}
+
+// TestPromptCachePressureEvictsColdSnapshots is the real-backend contract
+// for issue #35: when a namespace no longer fits a new save, admission
+// reclaims the coldest committed snapshots instead of refusing, every
+// request keeps succeeding, the namespace stays inside its budget, and
+// eviction is reported as its own figure rather than a budget refusal.
+// Pressure is derived from measured snapshot sizes: the same build on the
+// same model produces snapshots of comparable size for comparable prompts,
+// so the tightened budget is provably tight but satisfiable. Cache budget
+// limits are manager-side accounting and deliberately not part of the
+// namespace identity, so relaunching with a smaller max_bytes puts the
+// already-published snapshots under the new budget.
+func TestPromptCachePressureEvictsColdSnapshots(t *testing.T) {
+	llama := ensureLlamaServer(t)
+	m := startManager(t, llama)
+	port, err := freePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := map[string]any{"prompt_cache": map[string]any{"enabled": true, "min_reuse_tokens": 64}}
+	run := m.launchRun("pressure", port, spec)
+	id, _ := run["id"].(string)
+	waitCacheReady(t, m, id)
+	m.timedCompletion("pressure", promptA)
+	m.timedCompletion("pressure", promptB)
+	m.stopRun(id)
+
+	sizes := snapshotSizes(t, m.dataDir)
+	if len(sizes) < 2 {
+		t.Fatalf("expected two published snapshots to size the pressure budget, found %v", sizes)
+	}
+	var used, largest int64
+	for _, size := range sizes {
+		used += size
+		if size > largest {
+			largest = size
+		}
+	}
+	tight := map[string]any{"prompt_cache": map[string]any{
+		"enabled": true,
+		// Committed bytes plus half a snapshot fit at open (so startup
+		// cleans nothing), but a new save's worst-case reservation
+		// (max_entry_bytes) no longer fits: admission must reclaim the
+		// coldest snapshot before it can accept the write.
+		"min_reuse_tokens": 64,
+		"max_bytes":        used + largest/2,
+		"max_entry_bytes":  largest + largest/4,
+	}}
+	run = m.launchRun("pressure", port, tight)
+	id, _ = run["id"].(string)
+	summary := waitCacheReady(t, m, id)
+	if status, _ := summary["status"].(string); status != "ready" {
+		m.dumpLog()
+		t.Fatalf("cache must stay ready under a tightened budget: %v", summary)
+	}
+
+	if !m.tryCompletion("pressure", promptC) {
+		m.dumpLog()
+		t.Fatal("a save under cache pressure failed the client request")
+	}
+	summary = waitCacheStats(t, m, id, func(st map[string]any) bool {
+		return numeric(t, st["saves"], "cache stats saves") >= 1
+	})
+	st, _ := summary["stats"].(map[string]any)
+	if evictions := numeric(t, st["save_evictions"], "cache stats save_evictions"); evictions < 1 {
+		m.dumpLog()
+		t.Fatalf("a save that no longer fits must evict cold snapshots, got %v", st)
+	}
+	if refused := numeric(t, st["save_refused_budget"], "cache stats save_refused_budget"); refused != 0 {
+		t.Fatalf("reclaimable pressure must never count as a budget refusal, got %v", st)
+	}
+	if failures := numeric(t, st["save_failures"], "cache stats save_failures"); failures != 0 {
+		t.Fatalf("the pressure save must succeed cleanly, got %v", st)
+	}
+	if reason, _ := summary["last_error"].(string); reason != "" {
+		t.Fatalf("a successful save must clear last_error, got %q", reason)
+	}
+
+	// The tightened namespace stays bounded on disk: reclaim happened
+	// before publication, not as an over-budget mess afterwards.
+	budget := numeric(t, summary["max_bytes"], "summary max_bytes")
+	namespace, _ := summary["namespace"].(string)
+	report := m.get("/api/cache", http.StatusOK)
+	namespaces, _ := report["namespaces"].([]any)
+	found := false
+	for _, item := range namespaces {
+		entry, _ := item.(map[string]any)
+		if entry["namespace"] != namespace {
+			continue
+		}
+		found = true
+		if live := numeric(t, entry["bytes_used"], "namespace bytes_used"); live > budget {
+			t.Fatalf("namespace %s holds %.0f bytes over a budget of %.0f", namespace, live, budget)
+		}
+	}
+	if !found {
+		t.Fatalf("tightened namespace %s missing from /api/cache: %v", namespace, report)
+	}
+	m.stopRun(id)
+}
+
+// snapshotSizes reports the committed snapshot file sizes under the
+// manager's prompt-cache tree.
+func snapshotSizes(t *testing.T, dataDir string) []int64 {
+	t.Helper()
+	var sizes []int64
+	err := filepath.WalkDir(filepath.Join(dataDir, "prompt-cache"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".bin") {
+			return nil
+		}
+		info, statErr := entry.Info()
+		if statErr != nil {
+			return statErr
+		}
+		sizes = append(sizes, info.Size())
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sizes
+}
+
+// waitCacheStats polls a run's cache summary until its stats satisfy the
+// condition, so snapshot accounting is proven by observation, not by
+// assuming saves are synchronous with the response.
+func waitCacheStats(t *testing.T, m *manager, runID string, ready func(map[string]any) bool) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		for _, item := range runList(m.get("/api/state", http.StatusOK)) {
+			if item["id"] != runID {
+				continue
+			}
+			summary, _ := item["cache"].(map[string]any)
+			status, _ := summary["status"].(string)
+			st, _ := summary["stats"].(map[string]any)
+			if status != "" && status != "checking" && st != nil && ready(st) {
+				return summary
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("prompt-cache stats never satisfied the wait for run %s", runID)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 // TestUnsupportedBuildStaysUncached injects a crippled llama-server stub

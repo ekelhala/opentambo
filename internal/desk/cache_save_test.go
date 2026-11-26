@@ -3,6 +3,7 @@ package desk
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -92,7 +93,12 @@ func TestCacheInsufficientSaveCoverageCleansTempFile(t *testing.T) {
 	}
 }
 
-func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
+// TestCacheSaveRefusedBeforeWriteWhenOnlyPinnedBytesRemain: the refusal
+// path survives the default pressure policy (issue #35) when the budget
+// is held by entries a live restore owns - the only bytes that eviction
+// must never take. The backend save is not called, the refusal is
+// attributable, and the pinned snapshots are untouched.
+func TestCacheSaveRefusedBeforeWriteWhenOnlyPinnedBytesRemain(t *testing.T) {
 	fx := newCacheFixture(t)
 	store := fx.rc.store
 	for i, name := range []string{"seed-1", "seed-2"} {
@@ -106,6 +112,10 @@ func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
 		if _, err := store.Publish(name, []int32{int32(50_000 + i)}, 1); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.RestoreReady(name); err != nil {
+			t.Fatalf("pinning %s: %v", name, err)
+		}
+		defer store.Done(name)
 	}
 	fx.fake.mu.Lock()
 	before := fx.fake.saveCalls
@@ -117,8 +127,11 @@ func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
 	if summary.Stats.Saves != 0 {
 		t.Fatal("a snapshot was published although the temp write did not fit the budget")
 	}
-	if summary.Stats.SaveFailures != 1 {
-		t.Fatalf("expected the refused pre-write reservation to count as a save failure, got %d", summary.Stats.SaveFailures)
+	if summary.Stats.SaveFailures != 1 || summary.Stats.SaveRefusedBudget != 1 || summary.Stats.SaveEvictions != 0 {
+		t.Fatalf("expected one attributable budget refusal, got %+v", summary.Stats)
+	}
+	if !strings.Contains(summary.LastError, "reservation refused") {
+		t.Fatalf("the refusal must name its kind, got %q", summary.LastError)
 	}
 	fx.fake.mu.Lock()
 	after := fx.fake.saveCalls
@@ -129,9 +142,9 @@ func TestCacheSaveRefusedBeforeWriteWhenBudgetSpent(t *testing.T) {
 	if leftovers := tmpSnapshotFiles(t, fx.fake.saveDir); len(leftovers) != 0 {
 		t.Fatalf("refused save left %d unaccounted temporary snapshot(s): %v", len(leftovers), leftovers)
 	}
-	entries, _, _ := store.Summary()
-	if len(entries) != 2 {
-		t.Fatalf("refused save must preserve older committed snapshots, got %d entries", len(entries))
+	entries, used, budget := store.Summary()
+	if len(entries) != 2 || used != 800_000 || used > budget {
+		t.Fatalf("refused save must preserve pinned committed snapshots, got %+v used %d of %d", entries, used, budget)
 	}
 }
 

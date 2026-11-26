@@ -423,7 +423,7 @@ export interface components {
             save_failures: number;
             /**
              * Format: int64
-             * @description Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after reclaiming the committed snapshots the incoming state supersedes
+             * @description Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after the full admission reclaim: expired entries, the snapshots the incoming state supersedes, and the least recently used unpinned snapshots that were eligible as victims. A refusal means reclamation could not admit the write, not merely that no same-conversation victim existed; filesystem and metadata faults are reported as save failures instead
              */
             save_refused_budget: number;
             /**
@@ -431,6 +431,11 @@ export interface components {
              * @description Committed snapshots reclaimed at save admission because the incoming verified state supersedes them (their indexed prompt tokens are a leading slice of the incoming prompt tokens)
              */
             save_replacements: number;
+            /**
+             * Format: int64
+             * @description Committed snapshots evicted at save admission to make room for a new write: unpinned entries that the incoming state does not supersede, taken least recently used first after the superseded group was exhausted. Counts entries, not save attempts; expired-entry cleanup is not a pressure eviction
+             */
+            save_evictions: number;
             /** Format: int64 */
             restores: number;
             /** Format: int64 */

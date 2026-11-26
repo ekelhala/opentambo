@@ -18,6 +18,7 @@ const stats: CacheStats = {
   save_failures: 1,
   save_refused_budget: 1,
   save_replacements: 2,
+  save_evictions: 3,
   restores: 4,
   restore_failures: 0,
   queue_timeouts: 0,
@@ -83,7 +84,8 @@ test('panel ready state renders the usage stats', () => {
 
 // Issue #33: save failures must be attributable, not hidden behind the
 // aggregate counter. Refusals and replacements get their own figures and
-// the latest failure names its kind.
+// the latest failure names its kind. Issue #35 keeps pressure evictions a
+// separate figure from same-conversation replacements.
 test('panel ready state attributes save failures', () => {
   const html = panel({
     requested: true,
@@ -94,6 +96,7 @@ test('panel ready state attributes save failures', () => {
   })
   expect(html).toContain('1 refused (no budget room)')
   expect(html).toContain('2 superseded replaced')
+  expect(html).toContain('3 cold evicted')
   expect(html).toContain('Last snapshot save failure')
   expect(html).toContain('reservation refused')
 })
@@ -102,10 +105,11 @@ test('panel ready state stays clean without a save failure', () => {
   const html = panel({
     requested: true,
     status: 'ready',
-    stats: { ...stats, save_failures: 0, save_refused_budget: 0, save_replacements: 0 },
+    stats: { ...stats, save_failures: 0, save_refused_budget: 0, save_replacements: 0, save_evictions: 0 },
   })
   expect(html).not.toContain('Last snapshot save failure')
   expect(html).not.toContain('refused')
+  expect(html).not.toContain('cold evicted')
 })
 
 test('panel unsupported distinguishes plain forwarding and shows the reason', () => {
