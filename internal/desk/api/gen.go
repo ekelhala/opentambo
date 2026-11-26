@@ -191,10 +191,13 @@ type CacheStats struct {
 	RestoreFailures int64 `json:"restore_failures"`
 	RestoreMsTotal  int64 `json:"restore_ms_total"`
 	Restores        int64 `json:"restores"`
-	SaveFailures    int64 `json:"save_failures"`
-	SaveMsTotal     int64 `json:"save_ms_total"`
 
-	// SaveRefusedBudget Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after reclaiming the committed snapshots the incoming state supersedes
+	// SaveEvictions Committed snapshots evicted at save admission to make room for a new write: unpinned entries that the incoming state does not supersede, taken least recently used first after the superseded group was exhausted. Counts entries, not save attempts; expired-entry cleanup is not a pressure eviction
+	SaveEvictions int64 `json:"save_evictions"`
+	SaveFailures  int64 `json:"save_failures"`
+	SaveMsTotal   int64 `json:"save_ms_total"`
+
+	// SaveRefusedBudget Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after the full admission reclaim: expired entries, the snapshots the incoming state supersedes, and the least recently used unpinned snapshots that were eligible as victims. A refusal means reclamation could not admit the write, not merely that no same-conversation victim existed; filesystem and metadata faults are reported as save failures instead
 	SaveRefusedBudget int64 `json:"save_refused_budget"`
 
 	// SaveReplacements Committed snapshots reclaimed at save admission because the incoming verified state supersedes them (their indexed prompt tokens are a leading slice of the incoming prompt tokens)

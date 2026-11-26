@@ -374,21 +374,31 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	// booked at the per-entry limit: the largest snapshot the store could
 	// ever publish. Traffic that cannot fit inside the configured limits
 	// with its worst-case write must never reach the volume as an
-	// unaccounted temp file (issue #23). When the namespace is tight the
-	// admission reclaims only the committed snapshots this request's
-	// verified state supersedes (issue #33); anything else that cannot fit
-	// is refused here, before the child is asked to write.
-	reclaimed, err := rc.store.BeginTempWriteReplacing(entryID, rc.store.TempEstimate(), req.tokens)
+	// unaccounted temp file (issue #23). Under pressure the admission
+	// reclaims room in priority order - expired cleanup, then the
+	// snapshots this request's verified state supersedes (issue #33),
+	// then unrelated snapshots least-recently-used first (issue #35) -
+	// and anything that still cannot fit is refused here, before the
+	// child is asked to write. Removal counts are credited even when the
+	// admission later fails: evicted snapshots stay evicted.
+	admission, err := rc.store.BeginTempWriteEvicting(entryID, rc.store.TempEstimate(), req.tokens)
+	if admission.replacements > 0 {
+		rc.markStat(func(s *CacheStats) { s.SaveReplacements += int64(admission.replacements) })
+	}
+	if admission.evictions > 0 {
+		rc.markStat(func(s *CacheStats) { s.SaveEvictions += int64(admission.evictions) })
+	}
 	if err != nil {
 		rc.mu.Lock()
 		rc.stats.SaveFailures++
-		rc.stats.SaveRefusedBudget++
-		rc.lastError = "snapshot save: reservation refused: " + err.Error()
+		if BudgetRefused(err) {
+			rc.stats.SaveRefusedBudget++
+			rc.lastError = "snapshot save: reservation refused: " + err.Error()
+		} else {
+			rc.lastError = "snapshot save: admission reclaim failed: " + err.Error()
+		}
 		rc.mu.Unlock()
 		return
-	}
-	if reclaimed > 0 {
-		rc.markStat(func(s *CacheStats) { s.SaveReplacements += int64(reclaimed) })
 	}
 	saveCtx, cancel := context.WithTimeout(context.Background(), cacheSaveWait)
 	defer cancel()
