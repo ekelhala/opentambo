@@ -56,21 +56,33 @@ settings yields a fresh namespace.
   directories are owner-only; snapshot contents and prompt tokens are never
   logged or downloadable.
 - Snapshot saves reserve the worst-case snapshot size for the whole write, so
-  an accepted save can never push the namespace past its budget. While the
-  namespace is full, a save that lacks that headroom is refused before the
-  backend write — but a refresh of a running conversation is not starved by
-  its own stale states: at admission the snapshots the incoming verified
-  state supersedes (its indexed prompt tokens are a leading slice of the
-  incoming prompt tokens) are reclaimed first, and only then is the
-  reservation booked. Reclamation never touches another conversation's
-  snapshots, pinned entries, or live reservations, and a refusal that cannot
-  admit the write deletes nothing. (Reclaiming unrelated snapshots under
-  pressure is tracked in issue #35.)
-- Every save problem is attributable: the cache panel counts refusals for
-  budget reasons and superseded snapshots replaced at admission, and the run
-  summary's `last_error` names the kind of the most recent failure
-  (reservation refused, oversized entry, backend save error, coverage
-  mismatch, publication error). The next successful save clears it.
+  an accepted save can never push the namespace past its budget. The
+  namespace is a rolling cache by default: when a new save no longer fits,
+  admission reclaims room before refusing, in this order — expired entries
+  and abandoned writes under the persisted policy, then the snapshots the
+  incoming verified state **supersedes** (its indexed prompt tokens are a
+  leading slice of the incoming prompt tokens), then remaining snapshots
+  least-recently-used first with a deterministic entry-ID tie-break. Only
+  the minimum victim prefix that covers the shortfall goes; the cache is
+  never emptied toward a headroom target. Restores touch entries, so active
+  conversations move to the fresh end of the order and are not the next
+  victims. Pinned entries (live restores) and live write reservations are
+  never reclaimed, and when the eligible victims cannot cover the shortfall
+  the refusal deletes nothing. TTL disabled does not disable pressure
+  eviction; existing budgets, per-entry limits, and TTL stay authoritative,
+  and no configuration is needed for this behavior.
+- A failed save still pays its eviction cost: snapshots already reclaimed to
+  admit a write stay gone even if the backend save or publication then
+  fails — there is no rollback that would temporarily exceed the budget.
+  Actual removals are always counted; only capacity that reclamation could
+  not admit counts as a budget refusal, while filesystem and metadata
+  faults report as save failures without pretending to be a full cache.
+- Every save problem is attributable: the cache panel counts budget
+  refusals, superseded snapshots replaced at admission, cold snapshots
+  evicted for pressure, and the run summary's `last_error` names the kind
+  of the most recent failure (reservation refused, admission reclaim
+  failed, oversized entry, backend save error, coverage mismatch,
+  publication error). The next successful save clears it.
 - Snapshots exist only to accelerate prompt processing. A missing, corrupt,
   or incompatible snapshot never breaks inference: the restore is skipped and
   the request runs cold. Cache maintenance errors never replace a successful
