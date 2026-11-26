@@ -421,6 +421,16 @@ export interface components {
             saves: number;
             /** Format: int64 */
             save_failures: number;
+            /**
+             * Format: int64
+             * @description Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after reclaiming the committed snapshots the incoming state supersedes
+             */
+            save_refused_budget: number;
+            /**
+             * Format: int64
+             * @description Committed snapshots reclaimed at save admission because the incoming verified state supersedes them (their indexed prompt tokens are a leading slice of the incoming prompt tokens)
+             */
+            save_replacements: number;
             /** Format: int64 */
             restores: number;
             /** Format: int64 */
@@ -447,6 +457,8 @@ export interface components {
             min_reuse_tokens?: number;
             /** Format: int64 */
             max_bytes?: number;
+            /** @description Actionable detail from the most recent snapshot-save failure (reservation refused, oversized entry, backend save error, publication error); cleared by the next successful save */
+            last_error?: string;
             stats: components["schemas"]["CacheStats"];
         };
         /** @description Configuration for one managed llama-server process */
