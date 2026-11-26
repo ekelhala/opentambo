@@ -108,6 +108,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
                 {bytes(stats.bytes_saved)} written{stats.save_failures ? ` · ${stats.save_failures} failed` : ''}
                 {stats.save_refused_budget ? ` · ${stats.save_refused_budget} refused (no budget room)` : ''}
                 {stats.save_replacements ? ` · ${stats.save_replacements} superseded replaced` : ''}
+                {stats.save_evictions ? ` · ${stats.save_evictions} cold evicted` : ''}
               </span>
             </div>
             <div className="stat">
