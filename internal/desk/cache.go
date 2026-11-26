@@ -132,6 +132,13 @@ type RunCache struct {
 	slotUnsettled bool
 
 	stats CacheStats
+
+	// lastError carries the actionable detail of the most recent
+	// snapshot-save failure (reservation refused, oversized entry, backend
+	// save error, publication error). A ready cache whose saves keep
+	// failing was undiagnosable behind an aggregate counter (issue #33);
+	// the next successful save clears it.
+	lastError string
 }
 
 // CacheStats and CacheSummary are the generated wire types for coordinator
@@ -146,7 +153,7 @@ func newRunCache(spec PromptCache, namespace string, client *llamaClient, store 
 func (rc *RunCache) summary() CacheSummary {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	return CacheSummary{Requested: true, Status: rc.status, Reason: rc.reason, Namespace: rc.namespace, Build: rc.build, MinReuseTokens: rc.spec.MinReuseTokens, MaxBytes: rc.spec.MaxBytes, Stats: rc.stats}
+	return CacheSummary{Requested: true, Status: rc.status, Reason: rc.reason, Namespace: rc.namespace, Build: rc.build, MinReuseTokens: rc.spec.MinReuseTokens, MaxBytes: rc.spec.MaxBytes, LastError: rc.lastError, Stats: rc.stats}
 }
 
 // acquire takes the slot lease with cancellation and a bounded wait.
@@ -367,10 +374,21 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	// booked at the per-entry limit: the largest snapshot the store could
 	// ever publish. Traffic that cannot fit inside the configured limits
 	// with its worst-case write must never reach the volume as an
-	// unaccounted temp file (issue #23).
-	if !rc.store.BeginTempWrite(entryID, rc.store.TempEstimate()) {
-		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
+	// unaccounted temp file (issue #23). When the namespace is tight the
+	// admission reclaims only the committed snapshots this request's
+	// verified state supersedes (issue #33); anything else that cannot fit
+	// is refused here, before the child is asked to write.
+	reclaimed, err := rc.store.BeginTempWriteReplacing(entryID, rc.store.TempEstimate(), req.tokens)
+	if err != nil {
+		rc.mu.Lock()
+		rc.stats.SaveFailures++
+		rc.stats.SaveRefusedBudget++
+		rc.lastError = "snapshot save: reservation refused: " + err.Error()
+		rc.mu.Unlock()
 		return
+	}
+	if reclaimed > 0 {
+		rc.markStat(func(s *CacheStats) { s.SaveReplacements += int64(reclaimed) })
 	}
 	saveCtx, cancel := context.WithTimeout(context.Background(), cacheSaveWait)
 	defer cancel()
@@ -380,7 +398,7 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 		// reservation together, in that order: releasing the bytes first
 		// would authorize another write over a file still on disk.
 		_ = rc.store.AbortTempWrite(entryID)
-		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
+		rc.saveFailed(fmt.Sprintf("snapshot save failed: %v", err))
 		return
 	}
 	// The reservation stays live through Publish, which transfers it into
@@ -389,7 +407,7 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 	if saved.NSaved < len(req.tokens) {
 		// The saved state does not provably cover the indexed prefix.
 		_ = rc.store.AbortTempWrite(entryID)
-		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
+		rc.saveFailed(fmt.Sprintf("snapshot save covered %d of %d indexed tokens; the slot was erased", saved.NSaved, len(req.tokens)))
 		_ = rc.client.eraseSlot(saveCtx, chatSlot)
 		return
 	}
@@ -399,13 +417,23 @@ func (rc *RunCache) Finish(cleanupCtx context.Context, plan *cachePlan, response
 		// rejected file failed; this covers the paths that never reached
 		// the handoff (issue #24).
 		_ = rc.store.AbortTempWrite(entryID)
-		rc.markStat(func(s *CacheStats) { s.SaveFailures++ })
+		rc.saveFailed(fmt.Sprintf("snapshot publication failed: %v", err))
 		return
 	}
 	rc.mu.Lock()
 	rc.stats.Saves++
 	rc.stats.SaveMsTotal += int64(saved.TimingsMs.SaveMs)
 	rc.stats.BytesSaved += int64(saved.NWritten)
+	rc.lastError = ""
+	rc.mu.Unlock()
+}
+
+// saveFailed counts a snapshot-save failure and records its attributable
+// reason for the run summary (issue #33).
+func (rc *RunCache) saveFailed(reason string) {
+	rc.mu.Lock()
+	rc.stats.SaveFailures++
+	rc.lastError = reason
 	rc.mu.Unlock()
 }
 

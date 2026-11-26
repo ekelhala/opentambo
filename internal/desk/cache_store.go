@@ -754,6 +754,145 @@ func (s *cacheStore) BeginTempWrite(entryID string, estimate int64) bool {
 	return true
 }
 
+// BeginTempWriteReplacing is the save-path reservation that keeps snapshot
+// refreshes flowing under budget pressure (issue #33). Like BeginTempWrite
+// it books the worst-case estimate against committed plus already-reserved
+// bytes, but when the estimate no longer fits it reclaims the committed
+// snapshots the incoming verified state supersedes: entries whose indexed
+// prompt tokens are a leading slice of the incoming tokens (equality
+// included — a re-serialization of the same prefix). Other conversations'
+// snapshots are never victims here; reclaiming those under pressure is
+// issue #35's rolling-cache policy.
+//
+// The policy is all-or-nothing: an invalid or oversized estimate, or
+// superseded capacity that cannot cover the shortfall, is refused with an
+// actionable error before any file is removed and nothing is booked. On
+// success the victims' files are removed and their metadata committed
+// before the reservation is taken, so the invariant that committed bytes
+// plus reservations never exceed maxBytes holds at the instant the write is
+// admitted. Pinned entries (live restores) are never reclaimed. A removal
+// error aborts the admission conservatively: the reservation is not booked,
+// and any file already removed leaves its entry to be dropped by the next
+// reload, so occupied bytes are never unaccounted and free bytes are never
+// over-authorized. Returns the number of superseded snapshots reclaimed.
+func (s *cacheStore) BeginTempWriteReplacing(entryID string, estimate int64, tokens []int32) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endTempWriteLocked(entryID)
+	if estimate <= 0 || estimate > s.maxBytes {
+		return 0, fmt.Errorf("write reservation of %d bytes does not fit the %d-byte namespace budget", estimate, s.maxBytes)
+	}
+	shortfall := s.committedLocked() + s.reserved + estimate - s.maxBytes
+	if shortfall > 0 {
+		// Preflight against the live in-memory state so a refusal that
+		// cannot succeed deletes nothing.
+		eligible := sumEntryBytes(s.supersededVictimsLocked(tokens))
+		if eligible < shortfall {
+			return 0, fmt.Errorf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, superseded snapshots hold %d", estimate, shortfall, eligible)
+		}
+	}
+	reclaimed := 0
+	err := s.mutate(func() error {
+		shortfall = s.committedLocked() + s.reserved + estimate - s.maxBytes
+		if shortfall <= 0 {
+			return nil
+		}
+		n, freed, err := s.reclaimVictimsLocked(s.supersededVictimsLocked(tokens), shortfall)
+		reclaimed = n
+		if err != nil {
+			return err
+		}
+		if freed < shortfall {
+			return fmt.Errorf("no snapshot budget headroom for a %d-byte write reservation: shortfall %d bytes, superseded snapshots freed %d before the state changed", estimate, shortfall, freed)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	s.reserved += estimate
+	s.temps[entryID] = &tempReservation{bytes: estimate, at: s.now()}
+	return reclaimed, nil
+}
+
+// reclaimVictimsLocked removes victims in order until the freed bytes cover
+// shortfall, dropping their index entries. It stops at the first removal
+// error (the freed so-far bytes stay removed; the next reload reconciles
+// their entries), so callers must verify coverage before booking anything.
+func (s *cacheStore) reclaimVictimsLocked(victims []*CacheEntry, shortfall int64) (int, int64, error) {
+	reclaimed, freed := 0, int64(0)
+	for _, v := range victims {
+		if freed >= shortfall {
+			break
+		}
+		if err := os.Remove(filepath.Join(s.dir, v.Filename)); err != nil && !os.IsNotExist(err) {
+			return reclaimed, freed, fmt.Errorf("reclaim snapshot %s: %w", v.ID, err)
+		}
+		delete(s.entries, v.ID)
+		delete(s.invalid, v.ID)
+		freed += v.Bytes
+		reclaimed++
+	}
+	return reclaimed, freed, nil
+}
+
+// sumEntryBytes totals the committed bytes of the given entries.
+func sumEntryBytes(entries []*CacheEntry) int64 {
+	var total int64
+	for _, e := range entries {
+		total += e.Bytes
+	}
+	return total
+}
+
+// committedLocked sums the bytes of committed snapshot entries.
+func (s *cacheStore) committedLocked() int64 {
+	var used int64
+	for _, e := range s.entries {
+		used += e.Bytes
+	}
+	return used
+}
+
+// supersededVictimsLocked lists the reclaimable snapshots the incoming
+// token sequence supersedes — unpinned entries whose verified indexed
+// prompt tokens are a leading slice of tokens (equality included) — in
+// least-recently-used order with entry ID as a deterministic tie-breaker.
+// The caller removes only the shortest prefix of this list that covers its
+// shortfall.
+func (s *cacheStore) supersededVictimsLocked(tokens []int32) []*CacheEntry {
+	var victims []*CacheEntry
+	for _, e := range s.entries {
+		if s.pins[e.ID] > 0 || !tokensSupersede(e.PromptTokens, tokens) {
+			continue
+		}
+		victims = append(victims, e)
+	}
+	sort.Slice(victims, func(i, j int) bool {
+		if !victims[i].LastUsedAt.Equal(victims[j].LastUsedAt) {
+			return victims[i].LastUsedAt.Before(victims[j].LastUsedAt)
+		}
+		return victims[i].ID < victims[j].ID
+	})
+	return victims
+}
+
+// tokensSupersede reports whether incoming is a continuation of prefix:
+// prefix is a leading slice of incoming (equality included). This is the
+// verified conversation relationship, not a guessed conversation id or a
+// mere shared prefix.
+func tokensSupersede(prefix, incoming []int32) bool {
+	if len(prefix) > len(incoming) {
+		return false
+	}
+	for i, tok := range prefix {
+		if incoming[i] != tok {
+			return false
+		}
+	}
+	return true
+}
+
 // EndTempWrite releases the budget booked by BeginTempWrite for the entry.
 // It only releases accounting: callers that must also discard the write's
 // files (a failed or abandoned save) use AbortTempWrite so the removal and
