@@ -542,6 +542,8 @@ components:
         - bypassed
         - saves
         - save_failures
+        - save_refused_budget
+        - save_replacements
         - restores
         - restore_failures
         - queue_timeouts
@@ -571,6 +573,21 @@ components:
         save_failures:
           type: integer
           format: int64
+        save_refused_budget:
+          type: integer
+          format: int64
+          description: >-
+            Snapshot saves refused before the backend write because the
+            worst-case reservation did not fit the namespace budget even
+            after reclaiming the committed snapshots the incoming state
+            supersedes
+        save_replacements:
+          type: integer
+          format: int64
+          description: >-
+            Committed snapshots reclaimed at save admission because the
+            incoming verified state supersedes them (their indexed prompt
+            tokens are a leading slice of the incoming prompt tokens)
         restores:
           type: integer
           format: int64
@@ -613,6 +630,12 @@ components:
         max_bytes:
           type: integer
           format: int64
+        last_error:
+          type: string
+          description: >-
+            Actionable detail from the most recent snapshot-save failure
+            (reservation refused, oversized entry, backend save error,
+            publication error); cleared by the next successful save
         stats:
           $ref: '#/components/schemas/CacheStats'
     Launch:

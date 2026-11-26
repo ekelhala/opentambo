@@ -55,6 +55,22 @@ settings yields a fresh namespace.
   limit, TTL, and LRU eviction, with in-flight entries pinned. Files and
   directories are owner-only; snapshot contents and prompt tokens are never
   logged or downloadable.
+- Snapshot saves reserve the worst-case snapshot size for the whole write, so
+  an accepted save can never push the namespace past its budget. While the
+  namespace is full, a save that lacks that headroom is refused before the
+  backend write — but a refresh of a running conversation is not starved by
+  its own stale states: at admission the snapshots the incoming verified
+  state supersedes (its indexed prompt tokens are a leading slice of the
+  incoming prompt tokens) are reclaimed first, and only then is the
+  reservation booked. Reclamation never touches another conversation's
+  snapshots, pinned entries, or live reservations, and a refusal that cannot
+  admit the write deletes nothing. (Reclaiming unrelated snapshots under
+  pressure is tracked in issue #35.)
+- Every save problem is attributable: the cache panel counts refusals for
+  budget reasons and superseded snapshots replaced at admission, and the run
+  summary's `last_error` names the kind of the most recent failure
+  (reservation refused, oversized entry, backend save error, coverage
+  mismatch, publication error). The next successful save clears it.
 - Snapshots exist only to accelerate prompt processing. A missing, corrupt,
   or incompatible snapshot never breaks inference: the restore is skipped and
   the request runs cold. Cache maintenance errors never replace a successful

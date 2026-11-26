@@ -106,6 +106,8 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
               </span>
               <span className="f">
                 {bytes(stats.bytes_saved)} written{stats.save_failures ? ` · ${stats.save_failures} failed` : ''}
+                {stats.save_refused_budget ? ` · ${stats.save_refused_budget} refused (no budget room)` : ''}
+                {stats.save_replacements ? ` · ${stats.save_replacements} superseded replaced` : ''}
               </span>
             </div>
             <div className="stat">
@@ -127,6 +129,11 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
               </span>
             </div>
           </div>
+          {cache.last_error ? (
+            <p className="break-all pt-2 text-xs text-[var(--t-text-2)]">
+              Last snapshot save failure: {cache.last_error}
+            </p>
+          ) : null}
         </div>
       )
     case 'unsupported':

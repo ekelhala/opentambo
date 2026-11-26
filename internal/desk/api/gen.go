@@ -193,7 +193,13 @@ type CacheStats struct {
 	Restores        int64 `json:"restores"`
 	SaveFailures    int64 `json:"save_failures"`
 	SaveMsTotal     int64 `json:"save_ms_total"`
-	Saves           int64 `json:"saves"`
+
+	// SaveRefusedBudget Snapshot saves refused before the backend write because the worst-case reservation did not fit the namespace budget even after reclaiming the committed snapshots the incoming state supersedes
+	SaveRefusedBudget int64 `json:"save_refused_budget"`
+
+	// SaveReplacements Committed snapshots reclaimed at save admission because the incoming verified state supersedes them (their indexed prompt tokens are a leading slice of the incoming prompt tokens)
+	SaveReplacements int64 `json:"save_replacements"`
+	Saves            int64 `json:"saves"`
 }
 
 // CacheStatus Prompt-cache coordinator state. checking: the capability probe is still running; ready: the probe measured save, restore, and real prompt reuse on this exact model, binary, and configuration; unsupported: the combination lacks that reuse evidence (including architectures whose restored state is never reused) and requests run uncached; error: a slot-safety failure stopped the coordinator (manual restart needed).
@@ -202,7 +208,10 @@ type CacheStatus string
 // CacheSummary Sanitized public view of a run's prompt-cache coordinator
 type CacheSummary struct {
 	// Build llama-server build reported by the capability probe
-	Build          string     `json:"build,omitempty"`
+	Build string `json:"build,omitempty"`
+
+	// LastError Actionable detail from the most recent snapshot-save failure (reservation refused, oversized entry, backend save error, publication error); cleared by the next successful save
+	LastError      string     `json:"last_error,omitempty"`
 	MaxBytes       int64      `json:"max_bytes,omitempty"`
 	MinReuseTokens int        `json:"min_reuse_tokens,omitempty"`
 	Namespace      string     `json:"namespace,omitempty"`

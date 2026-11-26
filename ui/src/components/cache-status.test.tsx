@@ -16,6 +16,8 @@ const stats: CacheStats = {
   bypassed: 3,
   saves: 5,
   save_failures: 1,
+  save_refused_budget: 1,
+  save_replacements: 2,
   restores: 4,
   restore_failures: 0,
   queue_timeouts: 0,
@@ -77,6 +79,33 @@ test('panel ready state renders the usage stats', () => {
   expect(html).toContain('3') // hits
   expect(html).toContain('4 restores')
   expect(html).toContain('2 kB') // bytes_restored
+})
+
+// Issue #33: save failures must be attributable, not hidden behind the
+// aggregate counter. Refusals and replacements get their own figures and
+// the latest failure names its kind.
+test('panel ready state attributes save failures', () => {
+  const html = panel({
+    requested: true,
+    status: 'ready',
+    stats,
+    min_reuse_tokens: 64,
+    last_error: 'snapshot save: reservation refused: no snapshot budget headroom',
+  })
+  expect(html).toContain('1 refused (no budget room)')
+  expect(html).toContain('2 superseded replaced')
+  expect(html).toContain('Last snapshot save failure')
+  expect(html).toContain('reservation refused')
+})
+
+test('panel ready state stays clean without a save failure', () => {
+  const html = panel({
+    requested: true,
+    status: 'ready',
+    stats: { ...stats, save_failures: 0, save_refused_budget: 0, save_replacements: 0 },
+  })
+  expect(html).not.toContain('Last snapshot save failure')
+  expect(html).not.toContain('refused')
 })
 
 test('panel unsupported distinguishes plain forwarding and shows the reason', () => {
