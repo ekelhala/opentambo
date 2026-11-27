@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { BackIcon, CopyIcon, PlayIcon, PulseIcon, StopIcon, WarnIcon } from '@/components/icons'
 import { CachePanel } from '@/components/cache-status'
+import { LiveLog } from '@/components/live-log'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/status-pill'
 import { api, type Run } from '@/lib/api'
@@ -17,35 +18,7 @@ export function ServerDetail({
   onChanged: () => void
   onRelaunch: (run: Run) => void
 }) {
-  const runId = run?.id
-  const [logs, setLogs] = useState('')
   const [health, setHealth] = useState('')
-  const logRef = useRef<HTMLDivElement>(null)
-
-  // the consumer keys this component by run id, so log/health state starts fresh per run
-  useEffect(() => {
-    if (!runId) return
-    let alive = true
-    const load = async () => {
-      try {
-        const data = await api<{ logs: string }>(`runs/${runId}/logs`)
-        if (!alive) return
-        setLogs(data.logs)
-        requestAnimationFrame(() => {
-          const viewport = logRef.current
-          if (viewport) viewport.scrollTop = viewport.scrollHeight
-        })
-      } catch {
-        /* the run may have been cleaned up between polls */
-      }
-    }
-    load()
-    const timer = setInterval(load, 2000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [runId])
 
   if (!run) {
     return (
@@ -205,17 +178,7 @@ export function ServerDetail({
             <ArgBlock label="Full command" value={command} wrap />
           </div>
         </div>
-        <div className="panel lg:col-span-2">
-          <div className="panel-head">
-            <span className="panel-title">Live log</span>
-            <span className="panel-meta">last 128 KiB · polls every 2 s</span>
-          </div>
-          <div className="panel-body">
-            <div ref={logRef} className="console h-[380px]">
-              <pre className="break-all whitespace-pre-wrap">{logs || 'Waiting for output…'}</pre>
-            </div>
-          </div>
-        </div>
+        <LiveLog key={run.id} runId={run.id} />
       </div>
     </div>
   )
