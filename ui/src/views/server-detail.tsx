@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { BackIcon, CopyIcon, PlayIcon, PulseIcon, StopIcon, WarnIcon } from '@/components/icons'
 import { CachePanel } from '@/components/cache-status'
+import { LiveLog } from '@/components/live-log'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/status-pill'
 import { api, type Run } from '@/lib/api'
@@ -17,36 +18,8 @@ export function ServerDetail({
   onChanged: () => void
   onRelaunch: (run: Run) => void
 }) {
-  const runId = run?.id
-  const [logs, setLogs] = useState('')
   const [health, setHealth] = useState('')
   const [tab, setTab] = useState<'log' | 'config'>('log')
-  const logRef = useRef<HTMLDivElement>(null)
-
-  // the consumer keys this component by run id, so log/health state starts fresh per run
-  useEffect(() => {
-    if (!runId) return
-    let alive = true
-    const load = async () => {
-      try {
-        const data = await api<{ logs: string }>(`runs/${runId}/logs`)
-        if (!alive) return
-        setLogs(data.logs)
-        requestAnimationFrame(() => {
-          const viewport = logRef.current
-          if (viewport) viewport.scrollTop = viewport.scrollHeight
-        })
-      } catch {
-        /* the run may have been cleaned up between polls */
-      }
-    }
-    load()
-    const timer = setInterval(load, 2000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [runId])
 
   if (!run) {
     return (
@@ -149,25 +122,13 @@ export function ServerDetail({
 
       {run.cache?.requested && <CachePanel run={run} />}
 
-      <div className="panel">
-        <div className="panel-head">
-          <span className="tabs" role="tablist" aria-label="Run details">
-            <button role="tab" aria-selected={tab === 'log'} onClick={() => setTab('log')}>
-              Live log
-            </button>
-            <button role="tab" aria-selected={tab === 'config'} onClick={() => setTab('config')}>
-              Configuration
-            </button>
-          </span>
-          {tab === 'log' && <span className="panel-meta">last 128 KiB · polls every 2 s</span>}
-        </div>
-        {tab === 'log' ? (
-          <div className="panel-body">
-            <div ref={logRef} className="console h-[320px] sm:h-[420px]">
-              <pre className="break-all whitespace-pre-wrap">{logs || 'Waiting for output…'}</pre>
-            </div>
+      {tab === 'log' ? (
+        <LiveLog key={run.id} runId={run.id} leading={<RunTabs tab={tab} onSelect={setTab} />} />
+      ) : (
+        <div className="panel">
+          <div className="panel-head">
+            <RunTabs tab={tab} onSelect={setTab} />
           </div>
-        ) : (
           <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-3 text-xs">
             <div className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1">
               <span className="text-[var(--t-text-3)]">Model</span>
@@ -190,9 +151,22 @@ export function ServerDetail({
             />
             <ArgBlock label="Full command" value={command} wrap />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function RunTabs({ tab, onSelect }: { tab: 'log' | 'config'; onSelect: (tab: 'log' | 'config') => void }) {
+  return (
+    <span className="tabs" role="tablist" aria-label="Run details">
+      <button role="tab" aria-selected={tab === 'log'} onClick={() => onSelect('log')}>
+        Live log
+      </button>
+      <button role="tab" aria-selected={tab === 'config'} onClick={() => onSelect('config')}>
+        Configuration
+      </button>
+    </span>
   )
 }
 
