@@ -19,6 +19,7 @@ export function ServerDetail({
   onRelaunch: (run: Run) => void
 }) {
   const [health, setHealth] = useState('')
+  const [tab, setTab] = useState<'log' | 'config'>('log')
 
   if (!run) {
     return (
@@ -65,8 +66,10 @@ export function ServerDetail({
             <BackIcon /> Servers
           </Button>
           <StatusPill status={run.status} />
-          <span className="srv-name truncate">{run.launch.name}</span>
-          <span className="srv-meta">:{run.launch.port}</span>
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="srv-name truncate">{run.launch.name}</span>
+            <span className="srv-meta shrink-0">:{run.launch.port}</span>
+          </span>
           <span className="grow" />
           {serving ? (
             <>
@@ -93,8 +96,15 @@ export function ServerDetail({
             }}
           >
             <CopyIcon />
-            <span className="max-sm:hidden">Copy command</span>
           </Button>
+        </div>
+        <div className="meta-strip">
+          <Meta k="uptime" v={uptime(run.started, run.ended)} />
+          {run.pid ? <Meta k="pid" v={String(run.pid)} /> : null}
+          <Meta k="ctx" v={run.launch.context.toLocaleString()} />
+          <Meta k="gpu layers" v={String(run.launch.gpu_layers)} />
+          <Meta k="started" v={date(run.started)} />
+          {run.ended ? <Meta k="ended" v={date(run.ended)} /> : null}
         </div>
         {health && <p className="mono mt-2.5 text-xs break-all text-[var(--t-text-2)]">{health}</p>}
       </div>
@@ -102,7 +112,7 @@ export function ServerDetail({
       {run.error && (
         <div className="callout callout-bad">
           <WarnIcon />
-          <p className="break-all whitespace-pre-wrap">
+          <p className="break-words whitespace-pre-wrap">
             <strong>The process reported an error.</strong>
             <br />
             {run.error}
@@ -110,50 +120,14 @@ export function ServerDetail({
         </div>
       )}
 
-      <div className="stat-grid">
-        <div className="stat">
-          <span className="k">Status</span>
-          <div className="mt-2.5">
-            <StatusPill status={run.status} />
-          </div>
-          <span className="f">
-            {serving ? 'managed process' : run.status === 'failed' ? 'exited with error' : 'not serving'}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="k">Process</span>
-          <span className="v">
-            {run.pid ?? '—'}
-            <span className="u">pid</span>
-          </span>
-          <span className="f">
-            {uptime(run.started, run.ended)}
-            {run.ended ? ' · ended' : ''}
-          </span>
-        </div>
-        <div className="stat">
-          <span className="k">Endpoint</span>
-          <span className="v">:{run.launch.port}</span>
-          <span className="f">127.0.0.1 · alias {run.launch.name}</span>
-        </div>
-        <div className="stat">
-          <span className="k">Launch</span>
-          <span className="v">
-            {run.launch.context.toLocaleString()}
-            <span className="u">ctx</span>
-          </span>
-          <span className="f">
-            {run.launch.gpu_layers} GPU layers · started {date(run.started)}
-          </span>
-        </div>
-      </div>
-
       {run.cache?.requested && <CachePanel run={run} />}
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-3.5 lg:grid-cols-3">
-        <div className="panel lg:col-span-1">
+      {tab === 'log' ? (
+        <LiveLog key={run.id} runId={run.id} leading={<RunTabs tab={tab} onSelect={setTab} />} />
+      ) : (
+        <div className="panel">
           <div className="panel-head">
-            <span className="panel-title">Launch configuration</span>
+            <RunTabs tab={tab} onSelect={setTab} />
           </div>
           <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-3 text-xs">
             <div className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1">
@@ -178,9 +152,30 @@ export function ServerDetail({
             <ArgBlock label="Full command" value={command} wrap />
           </div>
         </div>
-        <LiveLog key={run.id} runId={run.id} />
-      </div>
+      )}
     </div>
+  )
+}
+
+function RunTabs({ tab, onSelect }: { tab: 'log' | 'config'; onSelect: (tab: 'log' | 'config') => void }) {
+  return (
+    <span className="tabs" role="tablist" aria-label="Run details">
+      <button role="tab" aria-selected={tab === 'log'} onClick={() => onSelect('log')}>
+        Live log
+      </button>
+      <button role="tab" aria-selected={tab === 'config'} onClick={() => onSelect('config')}>
+        Configuration
+      </button>
+    </span>
+  )
+}
+
+function Meta({ k, v }: { k: string; v: string }) {
+  return (
+    <span className="flex min-w-0 items-baseline gap-2">
+      <span className="shrink-0 text-[var(--t-text-3)]">{k}</span>
+      <span className="num truncate text-[var(--t-text)]">{v}</span>
+    </span>
   )
 }
 

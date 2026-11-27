@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { ChevronDownIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
@@ -8,9 +8,10 @@ import { isViewportAtBottom } from '@/lib/scroll'
  * Live log panel for one run. Polls every 2 s and pins the viewport to the
  * newest line while following. Scrolling up pauses the pin so earlier output
  * can be inspected; returning to the bottom or pressing the scroll-to-bottom
- * button resumes it.
+ * button resumes it. `leading` replaces the "Live log" title in the panel
+ * head, e.g. with the run-detail tabs.
  */
-export function LiveLog({ runId }: { runId: string }) {
+export function LiveLog({ runId, leading }: { runId: string; leading?: ReactNode }) {
   const [logs, setLogs] = useState('')
   const [following, setFollowing] = useState(true)
   const logRef = useRef<HTMLDivElement>(null)
@@ -66,10 +67,10 @@ export function LiveLog({ runId }: { runId: string }) {
   }
 
   return (
-    <div className="panel lg:col-span-2">
-      <LogPanelHead following={following} onResume={resumeFollow} />
+    <div className="panel">
+      <LogPanelHead following={following} onResume={resumeFollow} leading={leading} />
       <div className="panel-body">
-        <div ref={logRef} onScroll={handleScroll} className="console h-[380px]">
+        <div ref={logRef} onScroll={handleScroll} className="console h-[320px] sm:h-[420px]">
           <pre className="break-all whitespace-pre-wrap">{logs || 'Waiting for output…'}</pre>
         </div>
       </div>
@@ -77,10 +78,18 @@ export function LiveLog({ runId }: { runId: string }) {
   )
 }
 
-export function LogPanelHead({ following, onResume }: { following: boolean; onResume: () => void }) {
+export function LogPanelHead({
+  following,
+  onResume,
+  leading,
+}: {
+  following: boolean
+  onResume: () => void
+  leading?: ReactNode
+}) {
   return (
     <div className="panel-head">
-      <span className="panel-title">Live log</span>
+      {leading ?? <span className="panel-title">Live log</span>}
       {following ? (
         <span className="panel-meta">last 128 KiB · polls every 2 s</span>
       ) : (
