@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { MeterRow } from '@/components/meter'
 import { AreaChart, BarChart, Sparkline } from '@/components/sparkline'
 import { ServerRow } from '@/views/servers'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,6 @@ export function DashboardView({ state, history }: { state: State; history: Histo
   const [series, setSeries] = useState<Series>('bandwidth')
   const running = state.runs.filter((r) => r.status === 'running' || r.status === 'stopping')
   const failed = state.runs.filter((r) => r.status === 'failed')
-  const activeJobs = state.jobs.filter((j) => j.status === 'queued' || j.status === 'downloading')
   const downloading = state.jobs.filter((j) => j.status === 'downloading')
   const bandwidth = downloading.reduce((sum, j) => sum + j.bytes_per_second, 0)
   const disk = state.models.reduce((sum, m) => sum + m.size, 0)
@@ -144,35 +142,6 @@ export function DashboardView({ state, history }: { state: State; history: Histo
           </div>
         </section>
       </div>
-
-      <section className="panel">
-        <div className="panel-head">
-          <span className="panel-title">Manager</span>
-          <span className="panel-meta">capacity in use</span>
-        </div>
-        <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-x-8 md:grid-cols-3">
-          <MeterRow
-            label="Servers"
-            value={state.runs.length ? (running.length / state.runs.length) * 100 : 0}
-            detail={`${running.length} / ${state.runs.length}`}
-            tone="ok"
-          />
-          <MeterRow
-            label="Downloads"
-            value={
-              state.settings.parallel_downloads ? (downloading.length / state.settings.parallel_downloads) * 100 : 0
-            }
-            detail={`${downloading.length} / ${state.settings.parallel_downloads}`}
-            tone="info"
-          />
-          <MeterRow
-            label="Jobs open"
-            value={state.jobs.length ? (activeJobs.length / state.jobs.length) * 100 : 0}
-            detail={`${activeJobs.length} / ${state.jobs.length}`}
-            tone="warn"
-          />
-        </div>
-      </section>
 
       <div>
         <div className="sub-label mb-3.5">Servers on this host</div>

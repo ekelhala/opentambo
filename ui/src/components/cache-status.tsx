@@ -67,7 +67,7 @@ function CacheCallout({ status, reason }: { status: FailureStatus; reason?: stri
   return (
     <div className="callout callout-bad m-3 mb-0">
       <WarnIcon />
-      <p className="break-all">
+      <p className="break-words">
         <strong>{copy.headline}</strong> {reason || copy.fallback} {copy.outcome}
       </p>
     </div>
@@ -87,8 +87,8 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
       if (!stats) return null
       return (
         <div className="panel-body">
-          <div className="stat-grid">
-            <div className="stat">
+          <div className="kv">
+            <div>
               <span className="k">Disk hits</span>
               <span className="v">
                 {stats.hits}
@@ -98,7 +98,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
                 {stats.restores} restores · {bytes(stats.bytes_restored)}
               </span>
             </div>
-            <div className="stat">
+            <div>
               <span className="k">Snapshots saved</span>
               <span className="v">
                 {stats.saves}
@@ -111,7 +111,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
                 {stats.save_evictions ? ` · ${stats.save_evictions} cold evicted` : ''}
               </span>
             </div>
-            <div className="stat">
+            <div>
               <span className="k">Live reuse</span>
               <span className="v">
                 {stats.live_kept}
@@ -119,7 +119,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
               </span>
               <span className="f">{stats.requests} coordinated requests</span>
             </div>
-            <div className="stat">
+            <div>
               <span className="k">Cold / bypassed</span>
               <span className="v">
                 {stats.misses + stats.bypassed}
@@ -158,8 +158,9 @@ export function CachePanel({ run }: { run: Run }) {
         <span className="panel-title">Prompt cache</span>
         <CacheBadge cache={cache} />
         <span className="panel-meta">
-          {cache.build ? `llama.cpp ${cache.build}` : ''}
-          {cache.namespace ? ` · ns ${cache.namespace}` : ''}
+          {[cache.build ? `llama.cpp ${cache.build}` : '', cache.namespace ? `ns ${cache.namespace}` : '']
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </div>
       <CachePanelBody cache={cache} />

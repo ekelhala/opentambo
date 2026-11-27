@@ -8,8 +8,9 @@ function quantKey(model: CatalogModel, quant: Quantization): string {
   return `${model.repo}::${quant.family}::${quant.label}::${quant.primary}`
 }
 
-/** The shelf, grouped the way models are actually chosen: repository first,
- *  then quantization. Individual shards stay reachable under each group. */
+/** The shelf, grouped the way models are actually chosen: one quiet row per
+ *  repository, quantizations behind a tap, individual shards behind another.
+ *  Nothing is expanded until the operator asks for it. */
 export function FilesView({
   state,
   onLaunch,
@@ -20,7 +21,8 @@ export function FilesView({
   onDelete: (file: ModelFile) => void
 }) {
   const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [openRepos, setOpenRepos] = useState<Record<string, boolean>>({})
+  const [openQuants, setOpenQuants] = useState<Record<string, boolean>>({})
   const runningAlias = new Map(
     state.runs
       .filter((r) => r.status === 'running' || r.status === 'stopping')
@@ -46,116 +48,114 @@ export function FilesView({
     <div>
       <h2 className="pane-title">Models</h2>
       <p className="pane-lede">
-        Downloaded models by repository and quantization. The directory is the inventory ·{' '}
-        <span className="num">{bytes(total)}</span> in {state.settings.models}
+        {state.catalog.length} {state.catalog.length === 1 ? 'model' : 'models'} ·{' '}
+        <span className="num">{bytes(total)}</span> — open a repository to launch a quantization.
       </p>
-      <div className="panel">
-        <div className="panel-body">
-          <div className="mb-3.5 flex flex-wrap items-center gap-3">
-            <div className="search min-w-56 grow sm:max-w-72 sm:grow-0">
-              <SearchIcon />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter by repo or quantization…"
-                aria-label="Filter models"
-              />
-            </div>
-            <span className="badge badge-idle">
-              {state.catalog.length} {state.catalog.length === 1 ? 'model' : 'models'} · {state.models.length} GGUF
-              files
-            </span>
-            <span className="mono max-sm:hidden text-xs text-[var(--t-text-3)]">scan of {state.settings.models}</span>
-          </div>
-          {repos.length ? (
-            <div className="table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Quantization</th>
-                    <th className="w-24 text-right">Size</th>
-                    <th className="hidden w-20 sm:table-cell">Files</th>
-                    <th className="hidden w-32 sm:table-cell">Modified</th>
-                    <th className="hidden w-44 sm:table-cell">Status</th>
-                    <th className="w-28" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {repos.map((model) => (
-                    <RepoRows
-                      key={model.repo}
-                      model={model}
-                      runningAlias={runningAlias}
-                      expanded={expanded}
-                      setExpanded={setExpanded}
-                      onLaunch={onLaunch}
-                      onDelete={onDelete}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
-              {state.catalog.length ? 'No models match' : 'No models yet. Queue a download.'}
-            </p>
-          )}
-        </div>
+      <div className="search mb-3.5 max-w-96">
+        <SearchIcon />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Filter by repo or quantization…"
+          aria-label="Filter models"
+        />
       </div>
+      {repos.length ? (
+        <div className="panel">
+          {repos.map((model) => {
+            // searching opens repos by default, but an explicit close still wins
+            const repoOpen = needle ? openRepos[model.repo] !== false : !!openRepos[model.repo]
+            return (
+              <RepoGroup
+                key={model.repo}
+                model={model}
+                runningAlias={runningAlias}
+                repoOpen={repoOpen}
+                onToggleRepo={() => setOpenRepos({ ...openRepos, [model.repo]: !repoOpen })}
+                openQuants={openQuants}
+                setOpenQuants={setOpenQuants}
+                onLaunch={onLaunch}
+                onDelete={onDelete}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
+          {state.catalog.length ? 'No models match' : 'No models yet. Queue a download.'}
+        </p>
+      )}
     </div>
   )
 }
 
-function RepoRows({
+function RepoGroup({
   model,
   runningAlias,
-  expanded,
-  setExpanded,
+  repoOpen,
+  onToggleRepo,
+  openQuants,
+  setOpenQuants,
   onLaunch,
   onDelete,
 }: {
   model: CatalogModel
   runningAlias: Map<string, string>
-  expanded: Record<string, boolean>
-  setExpanded: (value: Record<string, boolean>) => void
+  repoOpen: boolean
+  onToggleRepo: () => void
+  openQuants: Record<string, boolean>
+  setOpenQuants: (value: Record<string, boolean>) => void
   onLaunch: (model: string) => void
   onDelete: (file: ModelFile) => void
 }) {
+  const aliases = model.quantizations
+    .flatMap((quant) => quant.files.map((file) => runningAlias.get(file.path)))
+    .filter((name): name is string => name !== undefined)
   return (
-    <>
-      <tr className="border-t border-[var(--t-line-soft)] first:border-t-0">
-        <td colSpan={6} className="bg-[var(--t-bg-deep)]">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
-            <span className="fname font-semibold">{model.repo}</span>
-            <span className="badge badge-idle">
+    <section className="border-b border-[var(--t-line)] last:border-b-0">
+      <button
+        onClick={onToggleRepo}
+        aria-expanded={repoOpen}
+        className="repo-head flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left"
+      >
+        <span className="fname min-w-0 grow truncate font-semibold">{model.repo}</span>
+        <span className="num shrink-0 text-xs text-[var(--t-text-3)]">{bytes(model.size)}</span>
+        {repoOpen ? (
+          <ChevronDownIcon className="size-4 shrink-0 text-[var(--t-text-3)]" />
+        ) : (
+          <ChevronRightIcon className="size-4 shrink-0 text-[var(--t-text-3)]" />
+        )}
+        <span className="mono flex w-full items-center gap-2 text-xs text-[var(--t-text-3)]">
+          {aliases.length > 0 && (
+            <span className="badge badge-ok shrink-0">running{aliases[0] ? ` · ${aliases[0]}` : ''}</span>
+          )}
+          {!repoOpen && (
+            <>
               {model.quantizations.length} {model.quantizations.length === 1 ? 'quantization' : 'quantizations'}
-            </span>
-            <span className="num text-xs text-[var(--t-text-3)]">{bytes(model.size)}</span>
-            <span className="mono ml-auto hidden truncate text-xs text-[var(--t-text-3)] lg:inline">{model.path}</span>
-          </div>
-        </td>
-      </tr>
-      {model.quantizations.map((quant) => {
-        const key = quantKey(model, quant)
-        const open = !!expanded[key]
-        const alias = quant.files.map((file) => runningAlias.get(file.path)).find((name) => name !== undefined)
-        return (
-          <QuantRows
-            key={key}
-            quant={quant}
-            open={open}
-            alias={alias}
-            onToggle={() => setExpanded({ ...expanded, [key]: !open })}
-            onLaunch={() => onLaunch(quant.primary)}
-            onDelete={onDelete}
-          />
-        )
-      })}
-    </>
+            </>
+          )}
+        </span>
+      </button>
+      {repoOpen &&
+        model.quantizations.map((quant) => {
+          const key = quantKey(model, quant)
+          return (
+            <QuantRow
+              key={key}
+              quant={quant}
+              open={!!openQuants[key]}
+              alias={quant.files.map((file) => runningAlias.get(file.path)).find((name) => name !== undefined)}
+              onToggle={() => setOpenQuants({ ...openQuants, [key]: !openQuants[key] })}
+              onLaunch={() => onLaunch(quant.primary)}
+              onDelete={onDelete}
+            />
+          )
+        })}
+    </section>
   )
 }
 
-function QuantRows({
+function QuantRow({
   quant,
   open,
   alias,
@@ -171,72 +171,50 @@ function QuantRows({
   onDelete: (file: ModelFile) => void
 }) {
   return (
-    <>
-      <tr>
-        <td className="max-w-0">
-          <button onClick={onToggle} aria-expanded={open} className="flex w-full min-w-0 items-center gap-2 text-left">
-            {open ? (
-              <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <span className="badge badge-info shrink-0">{quant.label || 'default'}</span>
-            {quant.family && !quant.label && (
-              <span className="fname min-w-0 truncate" title={quant.family}>
-                {quant.family}
-              </span>
-            )}
-            {quant.projection && <span className="badge badge-idle shrink-0">vision mmproj</span>}
-            {alias && <span className="badge badge-ok shrink-0 sm:hidden">running</span>}
-          </button>
-        </td>
-        <td className="num text-right text-xs">{bytes(quant.size)}</td>
-        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{quant.shards}</td>
-        <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(quant.modified)}</td>
-        <td className="hidden sm:table-cell">
-          {alias ? (
-            <span className="badge badge-ok">running · {alias}</span>
-          ) : quant.projection ? (
-            <span className="text-[var(--t-text-3)]">companion file</span>
+    <div className="quant-row border-t border-[var(--t-line-soft)]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+        <button
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 grow flex-wrap items-center gap-2 text-left"
+        >
+          {open ? (
+            <ChevronDownIcon className="size-3.5 shrink-0 text-[var(--t-text-3)]" />
           ) : (
-            <span className="text-[var(--t-text-3)]">—</span>
+            <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--t-text-3)]" />
           )}
-        </td>
-        <td>
-          <div className="flex justify-end gap-1.5">
-            <Button
-              variant="secondary"
-              size="sm"
-              aria-label={`Launch ${quant.label || quant.family}`}
-              disabled={!!alias || quant.projection}
-              onClick={onLaunch}
-            >
-              <PlayIcon /> Launch
-            </Button>
-          </div>
-        </td>
-      </tr>
+          <span className="badge badge-info shrink-0">{quant.label || 'default'}</span>
+          {quant.family && !quant.label && (
+            <span className="mono min-w-0 truncate text-xs text-[var(--t-text-2)]" title={quant.family}>
+              {quant.family}
+            </span>
+          )}
+          {quant.projection && <span className="badge badge-idle shrink-0">companion file</span>}
+          {alias && <span className="badge badge-ok shrink-0">running · {alias}</span>}
+        </button>
+        <span className="num shrink-0 text-xs text-[var(--t-text-2)]">{bytes(quant.size)}</span>
+        {!alias && !quant.projection && (
+          <Button variant="secondary" size="sm" aria-label={`Launch ${quant.label || quant.family}`} onClick={onLaunch}>
+            <PlayIcon /> Launch
+          </Button>
+        )}
+      </div>
       {open &&
         quant.files.map((file) => (
-          <tr key={file.path} className="text-[var(--t-text-2)]">
-            <td className="max-w-0 pl-8">
-              <span className="mono block truncate text-xs" title={file.path}>
-                {file.path}
-              </span>
-            </td>
-            <td className="num text-right text-xs">{bytes(file.size)}</td>
-            <td className="hidden sm:table-cell" />
-            <td className="num hidden text-xs text-[var(--t-text-3)] sm:table-cell">{date(file.modified)}</td>
-            <td className="hidden sm:table-cell" />
-            <td>
-              <div className="flex justify-end">
-                <Button variant="danger-ghost" size="sm" disabled={!!alias} onClick={() => onDelete(file)}>
-                  Delete
-                </Button>
-              </div>
-            </td>
-          </tr>
+          <div
+            key={file.path}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--t-line-soft)] bg-[var(--t-bg-deep)] px-4 py-2 pl-10"
+          >
+            <span className="mono min-w-0 grow basis-40 truncate text-xs text-[var(--t-text-2)]" title={file.path}>
+              {file.path}
+            </span>
+            <span className="num shrink-0 text-xs text-[var(--t-text-3)]">{bytes(file.size)}</span>
+            <span className="num shrink-0 text-xs text-[var(--t-text-3)] max-sm:hidden">{date(file.modified)}</span>
+            <Button variant="danger-ghost" size="sm" disabled={!!alias} onClick={() => onDelete(file)}>
+              Delete
+            </Button>
+          </div>
         ))}
-    </>
+    </div>
   )
 }
