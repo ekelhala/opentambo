@@ -33,12 +33,12 @@ test('short logs without a scrollbar are at bottom', () => {
 test('header shows polling meta and no pause notice while following', () => {
   const html = renderToStaticMarkup(<LogPanelHead following />)
   expect(html).toContain('Live log')
-  expect(html).toContain('polls every 2 s')
-  expect(html).not.toContain('auto-scroll paused')
+  expect(html).toContain('refreshes every 2 seconds')
+  expect(html).not.toContain('scrolling paused')
 })
 
 test('header announces paused auto-scroll without a button', () => {
   const html = renderToStaticMarkup(<LogPanelHead following={false} />)
-  expect(html).toContain('auto-scroll paused')
+  expect(html).toContain('scrolling paused')
   expect(html).not.toContain('Scroll to bottom')
 })
