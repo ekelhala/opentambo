@@ -2,7 +2,7 @@
 
 Launching a server with **Persistent prompt cache** enabled (the launch form
 checkbox, or `"prompt_cache": {"enabled": true}` on `POST /api/runs`) makes
-opentambo save and restore `llama-server` KV slot state on disk, so a
+opentambo save and restore `llama-server` KV slot state on disk. That way a
 conversation can resume without re-processing its whole prompt — even when
 the request comes from a different application or after the server was
 stopped and started again. Clients keep sending normal OpenAI-compatible
@@ -31,20 +31,20 @@ prompt work. Erasing before the restore is what makes the evidence honest —
 reuse can come only from the snapshot, never from a still-warm slot.
 
 Because capability is decided by measurement, there is no list of supported
-architectures to maintain: whatever `llama-server` can actually save,
-restore, and reuse works, including hybrid/recurrent models (Qwen3-Next-
-style SSM hybrids and friends), and combinations where restore is
+architectures to maintain. Whatever `llama-server` can actually save,
+restore, and reuse works — including hybrid and recurrent models (Qwen3-Next-
+style SSM hybrids and friends). Combinations where restore is
 silently a no-op are classified `unsupported` instead of pretending to be
 warm. Snapshots are keyed by a namespace hash of the model file contents
 (all shards), the llama-server binary, and state-affecting settings such
 as context size and GPU layers — never by the alias alone. Changing those
-settings yields a fresh namespace.
+settings gives you a fresh namespace.
 
 ## Scope and boundaries
 
 - Opt-in only. Runs without the option behave exactly as before, and a run
-  whose capability probe fails (see the **Prompt cache** panel: `no cache`)
-  keeps the plain inference path.
+  whose capability check fails (see the **Prompt cache** panel: `no cache`)
+  keeps the normal inference path.
 - `/v1/chat/completions` and `/v1/completions`, one completion per request,
   text-only, single slot (slot 0). Streaming and tool-calling chat are
   supported. Embeddings, `/v1/responses`, and parallel `n > 1` bypass cache

@@ -251,7 +251,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Service health (compatible with an existing Pangolin Manager health target) */
+        /** Service health (compatible with existing reverse-proxy health targets) */
         get: operations["health"];
         put?: never;
         post?: never;

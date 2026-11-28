@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Primary: Emil — self-hosting operator running llama.cpp inference on his own Linux host. He downloads GGUF files from Hugging Face, launches and supervises `llama-server` processes, and exposes them through his LiteLLM gateway to his own clients. He works from the terminal and a browser on the same network, runs the panel as the user who owns the models, and already operates Pangolin/Newt for access control.
+Primary: Emil — self-hosting operator running llama.cpp inference on his own Linux host. He downloads GGUF files from Hugging Face, launches and supervises `llama-server` processes, and exposes them through his LiteLLM gateway to his own clients. He works from the terminal and a browser on the same network, runs the panel as the user who owns the models, and already operates a reverse proxy with an access management solution.
 
 Secondary (confirmed, personal-first): homelab operators with a similar setup — their own Linux box, their own `llama-server` build, their own gateway. They should be able to adopt the panel from the README without Emil's help, but they are not a support commitment that overrides his workflow.
 
@@ -23,7 +23,7 @@ One Go binary with the UI embedded, no database, npm, Docker, or bundled inferen
 ## Operating Context
 
 - Linux inference host (amd64/arm64). Building needs Go 1.25+; running needs only the binary and a working `llama-server` build.
-- Listens on loopback (`127.0.0.1:8090` by default); security is delegated to the user's Pangolin access policy, with Newt tunneling when on another host.
+- Listens on loopback (`127.0.0.1:8090` by default); security is delegated to the user's reverse proxy or access management solution.
 - Models live in a mounted GGUF directory (`--models`); durable state lives in an embedded SQLite database under `--data` (`opentambo.db`, owner-only permissions, plaintext env overrides), with GGUF models and KV snapshot blobs kept as ordinary files beside it.
 - LiteLLM is the upstream gateway that owns client keys, policies, and its own database. OpenTambo does not sync its model list into LiteLLM; routes are registered there once per API model name.
 - Panel workflows map 1:1 to README sections: Downloads (queue GGUFs by repo + filename), Models (scan, inspect, launch, delete), Servers (launch form, PID/state/logs/health, stop-then-kill).
@@ -41,7 +41,7 @@ Confirmed capabilities (first working slice):
 
 Deliberate boundaries (documented in README; future work must not quietly cross them):
 
-- No built-in authentication — intentional, delegated to Pangolin. The panel can delete models and execute the configured runtime with custom args/env; docs and UI state this plainly.
+- No built-in authentication — intentional, delegated to an external reverse proxy or access management solution. The panel can delete models and execute the configured runtime with custom args/env; docs and UI state this plainly.
 - No Hugging Face browser, gated-repo credentials, shard discovery, or upstream checksum verification; split models are launched from the first shard manually; vision needs a manual `--mmproj` path.
 - GGUF inspection is filesystem metadata only, not parsed architecture/tensors.
 - No GPU memory/temperature, slot activity, or throughput telemetry; no log persistence; no automatic eviction, model loading, or LiteLLM registration.
@@ -71,5 +71,5 @@ Terminology: **models** = GGUF files on disk; **downloads** = queued Hugging Fac
 1. **The machine is the user's.** Manage their `llama-server` build and files as they are; show the exact argument vector and environment rather than abstracting them away.
 2. **Personal-first, shareable.** Decide from Emil's real workflow first, but keep every step adoptable by an equivalent homelab operator from the README alone.
 3. **Small by preference, flexible on evidence.** The single-binary, no-dependency posture is the default; departures need a demonstrated need, not a passing convenience.
-4. **Power disclosed, security delegated.** The panel deletes files and executes commands; its surfaces say what that grants, and access control stays with Pangolin.
+4. **Power disclosed, security delegated.** The panel deletes files and executes commands; its surfaces say what that grants, and access control stays with your reverse proxy or access management solution.
 5. **Files are truth.** The model inventory is the on-disk directory; state and jobs supplement it and never contradict it.

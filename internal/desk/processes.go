@@ -105,21 +105,21 @@ func (a *App) launchResolved(spec api.Launch) (*Run, error) {
 		spec.GPULayers = a.gpuLayers
 	}
 	if spec.Context < 1 || spec.GPULayers < 0 {
-		return nil, errors.New("context must be positive and GPU layers nonnegative")
+		return nil, errors.New("context size must be positive and GPU layers can't be negative")
 	}
 	spec.Name = strings.TrimSpace(spec.Name)
 	if spec.Name == "" {
 		spec.Name = defaultModelName(spec.Model)
 	}
 	if spec.Name == "" || strings.Contains(spec.Name, ",") || strings.IndexFunc(spec.Name, unicode.IsControl) >= 0 || len(spec.Name) > 256 {
-		return nil, errors.New("model name must be at most 256 characters and cannot contain commas or control characters")
+		return nil, errors.New("model name must be 256 characters or fewer, with no commas or control characters")
 	}
 	for _, run := range a.runs {
 		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Port == spec.Port {
-			return nil, errors.New("that port is already used by a managed server")
+			return nil, errors.New("that port is already in use by a managed server")
 		}
 		if (run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping) && run.Launch.Name == spec.Name {
-			return nil, errors.New("that model name is already used by a managed server")
+			return nil, errors.New("that model name is already in use by a managed server")
 		}
 	}
 	// These arguments belong to the manager so health checks and displayed model stay accurate.
@@ -131,10 +131,10 @@ func (a *App) launchResolved(spec api.Launch) (*Run, error) {
 	}
 	for key, value := range spec.Env {
 		if key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
-			return nil, errors.New("invalid environment variable")
+			return nil, errors.New("environment variables must use NAME=value format")
 		}
 		if strings.HasPrefix(key, "LLAMA_ARG_") {
-			return nil, errors.New("use launch arguments instead of LLAMA_ARG_* overrides")
+			return nil, errors.New("use launch arguments instead of LLAMA_ARG_* environment variables")
 		}
 	}
 	args := []string{"--model", model, "--ctx-size", strconv.Itoa(spec.Context), "--n-gpu-layers", strconv.Itoa(spec.GPULayers)}

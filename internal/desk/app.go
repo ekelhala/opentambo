@@ -233,7 +233,7 @@ func (a *App) Handler() http.Handler {
 	}
 	health := func(w http.ResponseWriter, r *http.Request) { respond(w, 200, api.HealthStatus{Status: api.Ok}) }
 	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /health", health) // Compatible with an existing Pangolin Manager health target.
+	mux.HandleFunc("GET /health", health) // Compatible with existing reverse-proxy health targets.
 
 	web, _ := fs.Sub(assets, "web")
 	mux.Handle("/", http.FileServer(http.FS(web)))
@@ -355,7 +355,7 @@ func (a *App) inventory() ([]Model, error) {
 
 func (a *App) modelPath(rel string) (string, error) {
 	if !filepath.IsLocal(rel) || !strings.HasSuffix(strings.ToLower(rel), ".gguf") {
-		return "", errors.New("select a GGUF inside the model directory")
+		return "", errors.New("pick a GGUF file inside the model directory")
 	}
 	path := filepath.Join(a.models, rel)
 	actual, err := filepath.EvalSymlinks(path)
@@ -433,7 +433,7 @@ func (a *App) deleteModel(w http.ResponseWriter, r *http.Request) {
 	for _, run := range a.runs {
 		if run.Status == api.RunStatusRunning || run.Status == api.RunStatusStopping {
 			if run.Launch.Model == rel || sameShardSet(rel, run.Launch.Model) {
-				fail(w, errors.New("stop the model server before deleting its file"))
+				fail(w, errors.New("stop the server before deleting its model file"))
 				return
 			}
 		}

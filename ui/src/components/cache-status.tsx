@@ -51,14 +51,14 @@ type FailureStatus = 'unsupported' | 'error'
 
 const failureCopy: Record<FailureStatus, { headline: string; fallback: string; outcome: string }> = {
   unsupported: {
-    headline: 'Persistent cache unavailable for this build.',
-    fallback: 'The capability probe failed.',
-    outcome: 'Requests run normally without cache coordination.',
+    headline: 'Persistent cache not available for this build.',
+    fallback: 'The capability check didn\'t pass.',
+    outcome: 'Requests keep running without caching.',
   },
   error: {
     headline: 'Prompt cache stopped after a safety failure.',
-    fallback: 'The cache could not put the slot in a known state.',
-    outcome: 'Requests may be rejected while the slot state is unsafe. Restart this server to recover.',
+    fallback: 'The cache couldn\'t put the slot in a known state.',
+    outcome: 'Some requests might be rejected while the slot is unsafe. Restart this server to recover.',
   },
 }
 
@@ -80,7 +80,7 @@ function CachePanelBody({ cache }: { cache: CacheView }) {
     case 'checking':
       return (
         <p className="panel-body text-xs text-[var(--t-text-2)]">
-          Verifying save/restore capability with the child server…
+          Checking if this server can save and restore snapshots…
         </p>
       )
     case 'ready':

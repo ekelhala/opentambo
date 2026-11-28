@@ -27,7 +27,7 @@ export function ServerDetail({
         <Button variant="secondary" size="sm" className="w-fit" onClick={() => navigate('servers')}>
           <BackIcon /> Servers
         </Button>
-        <p className="py-10 text-center text-sm text-[var(--t-text-2)]">This run is no longer in state.</p>
+        <p className="py-10 text-center text-sm text-[var(--t-text-2)]">This server is no longer running.</p>
       </div>
     )
   }
@@ -113,7 +113,7 @@ export function ServerDetail({
         <div className="callout callout-bad">
           <WarnIcon />
           <p className="break-words whitespace-pre-wrap">
-            <strong>The process reported an error.</strong>
+            <strong>Something went wrong with this process.</strong>
             <br />
             {run.error}
           </p>

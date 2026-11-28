@@ -15,7 +15,7 @@ export function GatewayView({ state }: { state: State }) {
       <div className="panel">
         <div className="panel-head">
           <span className="panel-title">Routes</span>
-          <span className="panel-meta">{serving.length ? `${serving.length} served` : 'nothing serving'}</span>
+          <span className="panel-meta">{serving.length ? `${serving.length} served` : 'nothing running'}</span>
         </div>
         <div className="panel-body grid grid-cols-[minmax(0,1fr)] gap-3.5">
           <div className="route">
@@ -45,7 +45,7 @@ export function GatewayView({ state }: { state: State }) {
             ))
           ) : (
             <p className="border-t border-[var(--t-line-soft)] pt-3.5 text-[13px] text-[var(--t-text-2)]">
-              No managed process is serving. Launch a server and its API model name becomes a stable route here and at
+              Nothing is serving yet. Launch a server and its API model name becomes a stable route here and at
               your LiteLLM gateway.
             </p>
           )}

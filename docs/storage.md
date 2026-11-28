@@ -2,10 +2,10 @@
 
 OpenTambo keeps its durable structured state in an **embedded SQLite
 database** — `<data>/opentambo.db`, by default `./data/opentambo.db`. The
-driver is compiled into the single binary: there is no database service, no
-daemon to install, and no `sqlite3` executable requirement. One OpenTambo
-process owns a data directory at a time; SQLite does not make two managers
-sharing one model/cache directory safe.
+driver is compiled into the single binary: no database service, no daemon
+to install, no `sqlite3` executable required. One OpenTambo
+process owns a data directory at a time; SQLite doesn't make it safe for two
+managers to share one model or cache directory.
 
 ## What lives where
 
@@ -29,27 +29,27 @@ with owner-only (`0600`) permissions. Snapshot blobs are written `0600` as
 well.
 
 SQLite runs in WAL mode with `synchronous=NORMAL` and a five-second busy
-timeout, which is the right durability/latency trade for a local single-writer
-manager. Download progress checkpoints are written from the transfer
-goroutine (at most every two seconds), so a crash loses at most a short window
-of byte counts — never job identity or resume position beyond that window.
+timeout — the right tradeoff for a local single-writer manager. Download
+progress checkpoints are written from the transfer goroutine (at most every two
+seconds), so a crash loses at most a short window of byte counts — never job
+identity or resume position beyond that window.
 
 ## Crash recovery
 
-Snapshot publication is a small state machine so an interrupted write can
+Snapshot publication is a small state machine, so an interrupted write can
 never masquerade as committed state: a row is recorded as `publishing`, the
 blob is written to a temp file, validated (size, checksum), renamed into
 place, and only then the row is committed. Removals announce `deleting` before
 touching the file. On startup OpenTambo reconciles rows against the
-filesystem: interrupted publications and announced deletions are finished,
-blobs no committed row references are removed, and rows whose file is missing
-or the wrong size are dropped.
+filesystem — interrupted publications and announced deletions are finished,
+blobs with no committed row reference are removed, and rows whose file is
+missing or the wrong size are dropped.
 
 Run history is reconciled the same way. A recorded PID is never proof of a
-supervised process: after a manager restart every row that was still live is
-demoted to `stopped` with an explanatory error, so history survives restarts
-without ever falsely claiming a dead process is running. Managed model servers
-are stopped with the manager and do not automatically restart.
+supervised process — after a manager restart every row that was still live is
+demoted to `stopped` with an explanatory error. That way history survives
+restarts without ever falsely claiming a dead process is running. Managed model
+servers are stopped with the manager and don't automatically restart.
 
 ## Upgrading from JSON files
 
@@ -65,7 +65,7 @@ transaction per source:
 
 Schema versions are tracked with `PRAGMA user_version` and migrated forward
 automatically, one transaction per version. A database newer than the running
-binary is rejected with an explicit error rather than partially understood —
+binary is rejected with a clear error rather than silently misread —
 upgrade OpenTambo itself to open it.
 
 ## Backup and restore
