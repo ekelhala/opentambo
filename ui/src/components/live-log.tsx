@@ -8,8 +8,8 @@ import { isViewportAtBottom } from '@/lib/scroll'
  * Live log panel for one run. Polls every 2 s and pins the viewport to the
  * newest line while following. Scrolling up pauses the pin so earlier output
  * can be inspected; returning to the bottom or pressing the scroll-to-bottom
- * button resumes it. `leading` replaces the "Live log" title in the panel
- * head, e.g. with the run-detail tabs.
+ * button floating over the bottom of the log resumes it. `leading` replaces
+ * the "Live log" title in the panel head, e.g. with the run-detail tabs.
  */
 export function LiveLog({ runId, leading }: { runId: string; leading?: ReactNode }) {
   const [logs, setLogs] = useState('')
@@ -68,37 +68,33 @@ export function LiveLog({ runId, leading }: { runId: string; leading?: ReactNode
 
   return (
     <div className="panel">
-      <LogPanelHead following={following} onResume={resumeFollow} leading={leading} />
+      <LogPanelHead following={following} leading={leading} />
       <div className="panel-body">
-        <div ref={logRef} onScroll={handleScroll} className="console h-[320px] sm:h-[420px]">
-          <pre className="break-all whitespace-pre-wrap">{logs || 'Waiting for output…'}</pre>
+        <div className="relative">
+          <div ref={logRef} onScroll={handleScroll} className="console h-[320px] sm:h-[420px]">
+            <pre className="break-all whitespace-pre-wrap">{logs || 'Waiting for output…'}</pre>
+          </div>
+          {following ? null : (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+              <Button variant="secondary" size="sm" className="pointer-events-auto" onClick={resumeFollow}>
+                <ChevronDownIcon /> Scroll to bottom
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-export function LogPanelHead({
-  following,
-  onResume,
-  leading,
-}: {
-  following: boolean
-  onResume: () => void
-  leading?: ReactNode
-}) {
+export function LogPanelHead({ following, leading }: { following: boolean; leading?: ReactNode }) {
   return (
     <div className="panel-head">
       {leading ?? <span className="panel-title">Live log</span>}
       {following ? (
         <span className="panel-meta">last 128 KiB · refreshes every 2 seconds</span>
       ) : (
-        <>
-          <span className="panel-meta">scrolling paused — new lines below</span>
-          <Button variant="secondary" size="sm" onClick={onResume}>
-            <ChevronDownIcon /> Scroll to bottom
-          </Button>
-        </>
+        <span className="panel-meta">scrolling paused — new lines below</span>
       )}
     </div>
   )
