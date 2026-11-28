@@ -30,16 +30,15 @@ test('short logs without a scrollbar are at bottom', () => {
   expect(isViewportAtBottom(viewport(80, 0, 380))).toBe(true)
 })
 
-test('header shows polling meta and no button while following', () => {
-  const html = renderToStaticMarkup(<LogPanelHead following onResume={() => {}} />)
+test('header shows polling meta and no pause notice while following', () => {
+  const html = renderToStaticMarkup(<LogPanelHead following />)
   expect(html).toContain('Live log')
   expect(html).toContain('polls every 2 s')
-  expect(html).not.toContain('Scroll to bottom')
+  expect(html).not.toContain('auto-scroll paused')
 })
 
-test('header announces paused auto-scroll and offers a way back down', () => {
-  const html = renderToStaticMarkup(<LogPanelHead following={false} onResume={() => {}} />)
+test('header announces paused auto-scroll without a button', () => {
+  const html = renderToStaticMarkup(<LogPanelHead following={false} />)
   expect(html).toContain('auto-scroll paused')
-  expect(html).toContain('Scroll to bottom')
-  expect(html).toContain('<button')
+  expect(html).not.toContain('Scroll to bottom')
 })
