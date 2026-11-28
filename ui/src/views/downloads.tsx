@@ -101,7 +101,9 @@ function DownloadForm({
     <div className={`panel ${className ?? ''}`}>
       <div className="panel-head">
         <span className="panel-title">New download</span>
-        <span className="panel-meta max-sm:hidden">public repos — pick a quantization and shards are handled for you</span>
+        <span className="panel-meta max-sm:hidden">
+          public repos — pick a quantization and shards are handled for you
+        </span>
       </div>
       <div className="panel-body">
         <form

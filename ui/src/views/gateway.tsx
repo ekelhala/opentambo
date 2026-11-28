@@ -45,8 +45,8 @@ export function GatewayView({ state }: { state: State }) {
             ))
           ) : (
             <p className="border-t border-[var(--t-line-soft)] pt-3.5 text-[13px] text-[var(--t-text-2)]">
-              Nothing is serving yet. Launch a server and its API model name becomes a stable route here and at
-              your LiteLLM gateway.
+              Nothing is serving yet. Launch a server and its API model name becomes a stable route here and at your
+              LiteLLM gateway.
             </p>
           )}
         </div>

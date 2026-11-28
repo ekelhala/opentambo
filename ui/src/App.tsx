@@ -175,7 +175,7 @@ export default function App() {
             </>
           ) : (
             <p className="py-16 text-center text-sm text-[var(--t-text-2)]">
-              {connected ? 'Loading…' : 'Can\'t reach the manager. Is it still running?'}
+              {connected ? 'Loading…' : "Can't reach the manager. Is it still running?"}
             </p>
           )}
         </div>
@@ -242,8 +242,8 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
         )}
         <div className="callout callout-info mt-5">
           <p>
-            <strong>This panel deletes models and runs your runtime.</strong> It ships without authentication on
-            purpose — access control belongs to your reverse proxy, not to a login nobody trusts anyway.
+            <strong>This panel deletes models and runs your runtime.</strong> It ships without authentication on purpose
+            — access control belongs to your reverse proxy, not to a login nobody trusts anyway.
           </p>
         </div>
       </DialogContent>

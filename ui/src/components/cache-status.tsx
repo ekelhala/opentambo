@@ -52,12 +52,12 @@ type FailureStatus = 'unsupported' | 'error'
 const failureCopy: Record<FailureStatus, { headline: string; fallback: string; outcome: string }> = {
   unsupported: {
     headline: 'Persistent cache not available for this build.',
-    fallback: 'The capability check didn\'t pass.',
+    fallback: "The capability check didn't pass.",
     outcome: 'Requests keep running without caching.',
   },
   error: {
     headline: 'Prompt cache stopped after a safety failure.',
-    fallback: 'The cache couldn\'t put the slot in a known state.',
+    fallback: "The cache couldn't put the slot in a known state.",
     outcome: 'Some requests might be rejected while the slot is unsafe. Restart this server to recover.',
   },
 }

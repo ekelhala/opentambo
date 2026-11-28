@@ -244,8 +244,8 @@ export function LaunchDialog({
             <span>
               <span className="f-label">Persistent prompt cache</span>
               <p className="mt-0.5 text-[var(--t-text-2)]">
-                Save and restore KV state on disk so conversations pick up where they left off, even across app
-                switches and server restarts. Requests to this server run one at a time, and{' '}
+                Save and restore KV state on disk so conversations pick up where they left off, even across app switches
+                and server restarts. Requests to this server run one at a time, and{' '}
                 <span className="mono">--slot-save-path</span> is handled automatically.
               </p>
             </span>
