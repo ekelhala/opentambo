@@ -92,9 +92,9 @@ export function LogPanelHead({ following, leading }: { following: boolean; leadi
     <div className="panel-head">
       {leading ?? <span className="panel-title">Live log</span>}
       {following ? (
-        <span className="panel-meta">last 128 KiB · polls every 2 s</span>
+        <span className="panel-meta">last 128 KiB · refreshes every 2 seconds</span>
       ) : (
-        <span className="panel-meta">auto-scroll paused · new lines below</span>
+        <span className="panel-meta">scrolling paused — new lines below</span>
       )}
     </div>
   )

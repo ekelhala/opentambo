@@ -49,7 +49,7 @@ func (a *App) proxyInference(w http.ResponseWriter, r *http.Request) {
 		Model string `json:"model"`
 	}
 	if err = json.Unmarshal(body, &input); err != nil || input.Model == "" {
-		proxyError(w, 400, "invalid_request_error", "provide a JSON object with a nonempty model name")
+		proxyError(w, 400, "invalid_request_error", "send a JSON object with a model name")
 		return
 	}
 	a.mu.Lock()
@@ -66,7 +66,7 @@ func (a *App) proxyInference(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Unlock()
 	if port == 0 {
-		proxyError(w, 404, "model_not_found", "model is not running; start it in opentambo first")
+		proxyError(w, 404, "model_not_found", "this model is not running — start it in the panel first")
 		return
 	}
 	ctx, cancel := context.WithCancel(r.Context())
@@ -123,7 +123,7 @@ func (a *App) proxyInference(w http.ResponseWriter, r *http.Request) {
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			observer.error = err
-			proxyError(w, 502, "upstream_unavailable", "the selected llama-server could not be reached")
+			proxyError(w, 502, "upstream_unavailable", "can't reach the llama-server for this model")
 		},
 	}
 	proxy.ServeHTTP(observer, r)

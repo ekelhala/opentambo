@@ -2,8 +2,8 @@
 
 OpenTambo is a lightweight llama.cpp process manager and persistent KV-cache
 proxy with a web control panel. It manages native `llama-server` processes for
-one model directory on one host and needs only the binary and your own working
-`llama-server` build.
+one model directory on one host. All you need is the binary and your own
+working `llama-server` build.
 
 ## Flags
 
@@ -48,8 +48,8 @@ logs, an explicit Health action, and the exact argument vector and environment
 overrides. Stop is graceful, then kill after five seconds; _Run again_ reopens
 the saved launch form.
 
-Extra arguments use **one argument per line**, with each value on its own
-line. There is no shell evaluation:
+Extra arguments go **one per line**, with each value on its own line. No shell
+evaluation here:
 
 ```text
 --parallel
@@ -57,9 +57,9 @@ line. There is no shell evaluation:
 --jinja
 ```
 
-Environment overrides use `NAME=value`, one per line, for example
+Environment overrides use `NAME=value`, one per line — for example
 `CUDA_VISIBLE_DEVICES=GPU-9682481c-...`. The model, API alias, host, and port
-are owned by the manager — use arguments rather than `LLAMA_ARG_*` variables.
+are set by the manager, so use arguments instead of `LLAMA_ARG_*` variables.
 Managed inference processes bind to `127.0.0.1`.
 
 ## State
@@ -67,10 +67,10 @@ Managed inference processes bind to `127.0.0.1`.
 Files are the model inventory. Durable state — download jobs with resume
 checkpoints, saved launch profiles, run history, and prompt-cache policy and
 snapshot metadata — lives in an embedded SQLite database at
-`--data/opentambo.db` with owner-only permissions; environment overrides are
-stored there in plaintext. Existing `state.json` / `index.json` installations
-are imported once at startup and the originals kept aside as `*.migrated`.
+`--data/opentambo.db` with owner-only permissions. Environment overrides are
+stored there in plaintext. Existing `state.json` and `index.json` installations
+are imported once at startup, and the originals are kept aside as `*.migrated`.
 Interrupted downloads can be resumed after a restart. Model servers are
-stopped with the manager and do not automatically restart — see
-[deployment.md](deployment.md) to run opentambo under systemd. Data layout,
-crash recovery and backup/restore: [storage.md](storage.md).
+stopped with the manager and don't automatically restart. See
+[deployment.md](deployment.md) to run opentambo under systemd. For data layout,
+crash recovery and backup and restore: [storage.md](storage.md).

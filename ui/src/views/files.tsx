@@ -82,7 +82,7 @@ export function FilesView({
         </div>
       ) : (
         <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
-          {state.catalog.length ? 'No models match' : 'No models yet. Queue a download.'}
+          {state.catalog.length ? 'No models match your filter' : 'No models yet. Queue a download.'}
         </p>
       )}
     </div>

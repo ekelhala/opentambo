@@ -175,7 +175,7 @@ export default function App() {
             </>
           ) : (
             <p className="py-16 text-center text-sm text-[var(--t-text-2)]">
-              {connected ? 'Loading…' : 'Cannot reach the tambo API. Is the manager running?'}
+              {connected ? 'Loading…' : "Can't reach the manager. Is it still running?"}
             </p>
           )}
         </div>
@@ -229,7 +229,7 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
           <DialogTitle className="dialog-title">Configuration</DialogTitle>
           <DialogDescription className="dialog-lede">
             OpenTambo — a lightweight llama.cpp process manager and persistent KV-cache proxy with a web control panel.
-            How this manager was started: files are the inventory; state lives beside them.
+            Files are the inventory; state lives beside them.
           </DialogDescription>
         </DialogHeader>
         {state && (
@@ -242,8 +242,8 @@ function SettingsDialog({ state, connected }: { state: State | null; connected: 
         )}
         <div className="callout callout-info mt-5">
           <p>
-            <strong>This panel deletes models and runs your runtime.</strong> It ships without authentication on
-            purpose: access control belongs to your Pangolin policy, not to a second login nobody trusts.
+            <strong>This panel deletes models and runs your runtime.</strong> It ships without authentication on purpose
+            — access control belongs to your reverse proxy, not to a login nobody trusts anyway.
           </p>
         </div>
       </DialogContent>

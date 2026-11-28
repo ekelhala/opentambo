@@ -268,7 +268,7 @@ paths:
   /health:
     get:
       operationId: health
-      summary: Service health (compatible with an existing Pangolin Manager health target)
+      summary: Service health (compatible with existing reverse-proxy health targets)
       responses:
         '200':
           description: Service is up

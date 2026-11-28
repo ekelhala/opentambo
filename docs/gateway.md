@@ -2,8 +2,8 @@
 
 OpenTambo is a lightweight llama.cpp process manager and persistent KV-cache
 proxy with a web control panel. As the gateway part of that, it exposes one
-OpenAI-compatible entry point for all managed processes, so LiteLLM backend
-URLs stay fixed when models, ports, or child servers change:
+OpenAI-compatible entry point for all managed processes. That way your LiteLLM
+backend URLs stay fixed when models, ports, or child servers change:
 
 ```text
 Client → LiteLLM (keys and policies) → opentambo /v1 → selected llama-server
@@ -31,12 +31,11 @@ removed before forwarding to a child. There are no automatic retries.
 Requests are limited to 32 MiB; the proxy waits up to ten minutes for response
 headers and imposes no total stream duration.
 
-There is no implicit startup or fallback: start the desired model in the UI
-first. A stopped or unknown model returns an OpenAI-style HTTP 404; an
-unreachable child returns 502; a child still loading can return its own 503.
-Process names appear in `/v1/models` while loading — listing is not a
-readiness guarantee. Backend support determines whether a particular
-inference endpoint works.
+There's no implicit startup or fallback — start the model you want in the UI
+first. A stopped or unknown model returns an OpenAI-style HTTP 404, an
+unreachable child returns 502, and a child still loading can return its own 503.
+Process names appear in `/v1/models` while loading, but listing is not a
+readiness guarantee. Whether a particular endpoint works depends on the backend.
 
 ## LiteLLM config
 

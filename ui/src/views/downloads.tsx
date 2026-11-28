@@ -101,7 +101,9 @@ function DownloadForm({
     <div className={`panel ${className ?? ''}`}>
       <div className="panel-head">
         <span className="panel-title">New download</span>
-        <span className="panel-meta max-sm:hidden">public repos · pick a quantization, shards handled for you</span>
+        <span className="panel-meta max-sm:hidden">
+          public repos — pick a quantization and shards are handled for you
+        </span>
       </div>
       <div className="panel-body">
         <form
@@ -149,7 +151,7 @@ function DownloadForm({
               />
             </div>
             <Button type="button" variant="secondary" onClick={lookUp} disabled={lookupBusy || !repoLooksValid}>
-              {lookupBusy ? <SpinnerIcon /> : <SearchIcon />} Look up quantizations
+              {lookupBusy ? <SpinnerIcon /> : <SearchIcon />} Find quantizations
             </Button>
           </div>
           {quants && quants.length > 0 && (
@@ -192,7 +194,7 @@ function DownloadForm({
               spellCheck={false}
             />
             <p className="f-hint">
-              Pick a quantization above to fill this automatically, or type exact filenames. Transfers land as{' '}
+              Pick a quantization above to fill this in, or type exact filenames. Transfers land as{' '}
               <span className="mono">.part</span> files and are verified before the final name is claimed. Existing
               files are never replaced.
             </p>
@@ -202,7 +204,7 @@ function DownloadForm({
               <DownloadIcon /> Queue download
             </Button>
             <span className="num text-xs text-[var(--t-text-3)]">
-              Parallel slots <b className="text-[var(--t-text)]">{slots}</b> in use
+              Slots <b className="text-[var(--t-text)]">{slots}</b> in use
             </span>
           </div>
         </form>

@@ -99,7 +99,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
               <AreaChart values={series === 'running' ? history.running : history.bandwidth} height={190} />
             )}
             <div className="num mt-2.5 flex justify-end text-xs text-[var(--t-text-3)]">
-              {values.length > 1 ? peakLabel : 'collecting samples…'}
+              {values.length > 1 ? peakLabel : 'waiting for data…'}
             </div>
           </div>
         </section>
@@ -150,7 +150,7 @@ export function DashboardView({ state, history }: { state: State; history: Histo
             running.map((run) => <ServerRow key={run.id} run={run} />)
           ) : (
             <p className="border border-dashed border-[var(--t-line)] py-8 text-center text-sm text-[var(--t-text-2)]">
-              No servers serving right now.
+              No servers running right now.
             </p>
           )}
         </div>

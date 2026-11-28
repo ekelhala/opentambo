@@ -70,7 +70,7 @@ test('badge shows one distinct state for every status', () => {
 
 test('panel checking state reports the in-flight probe', () => {
   const html = panel({ requested: true, status: 'checking' })
-  expect(html).toContain('Verifying save/restore capability')
+  expect(html).toContain('Checking if this server can save and restore snapshots')
 })
 
 test('panel ready state renders the usage stats', () => {
@@ -114,13 +114,13 @@ test('panel ready state stays clean without a save failure', () => {
 
 test('panel unsupported distinguishes plain forwarding and shows the reason', () => {
   const withReason = panel({ requested: true, status: 'unsupported', reason: 'slot save probe failed' })
-  expect(withReason).toContain('Persistent cache unavailable')
+  expect(withReason).toContain('Persistent cache not available')
   expect(withReason).toContain('slot save probe failed')
   // Ordinary forwarding is the truthful promise for this state.
-  expect(withReason).toContain('Requests run normally without cache coordination.')
+  expect(withReason).toContain('Requests keep running without caching')
 
   const withoutReason = panel({ requested: true, status: 'unsupported' })
-  expect(withoutReason).toContain('The capability probe failed.')
+  expect(withoutReason).toContain('The capability check didn&#x27;t pass.')
 })
 
 test('panel error names the safety failure without promising normal requests', () => {
@@ -131,10 +131,10 @@ test('panel error names the safety failure without promising normal requests', (
   // The misleading reassurance from issue #21 must never appear for errors.
   expect(withReason).not.toContain('run normally')
   // The rejection risk and the manual recovery action are stated.
-  expect(withReason).toContain('Requests may be rejected')
+  expect(withReason).toContain('Some requests might be rejected')
   expect(withReason).toContain('Restart this server')
 
   const withoutReason = panel({ requested: true, status: 'error' })
-  expect(withoutReason).toContain('The cache could not put the slot in a known state.')
+  expect(withoutReason).toContain('The cache couldn&#x27;t put the slot in a known state.')
   expect(withoutReason).not.toContain('run normally')
 })

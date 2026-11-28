@@ -128,11 +128,11 @@ func TestLaunchResolvedRejections(t *testing.T) {
 	cases := []struct{ name, body, want string }{
 		{"negative cache limit", `{"model":"test.gguf","port":18450,"prompt_cache":{"enabled":true,"max_bytes":-1}}`, "cannot be negative"},
 		{"cache model unreadable", `{"model":"test.gguf","port":18451,"prompt_cache":{"enabled":true}}`, "GGUF metadata"},
-		{"context too small", `{"model":"test.gguf","port":18452,"context":-5}`, "context must be positive"},
-		{"gpu layers negative", `{"model":"test.gguf","port":18453,"gpu_layers":-2}`, "context must be positive"},
+		{"context too small", `{"model":"test.gguf","port":18452,"context":-5}`, "context size must be positive"},
+		{"gpu layers negative", `{"model":"test.gguf","port":18453,"gpu_layers":-2}`, "GPU layers can't be negative"},
 		{"name with comma", `{"model":"test.gguf","port":18454,"name":"a,b","context":2048}`, "model name must be"},
 		{"blocked arg", `{"model":"test.gguf","port":18455,"context":2048,"args":["--host=0.0.0.0"]}`, "managed by opentambo"},
-		{"env bad key", `{"model":"test.gguf","port":18456,"context":2048,"env":{"A=B":"x"}}`, "invalid environment"},
+		{"env bad key", `{"model":"test.gguf","port":18456,"context":2048,"env":{"A=B":"x"}}`, "environment variables must use NAME=value"},
 		{"env LLAMA_ARG", `{"model":"test.gguf","port":18457,"context":2048,"env":{"LLAMA_ARG_CTX_SIZE":"1"}}`, "LLAMA_ARG_*"},
 		{"binary unresolvable", `{"model":"test.gguf","port":18458,"context":2048}`, "executable"},
 	}
@@ -159,11 +159,11 @@ func TestLaunchPortConflictAndExecFailure(t *testing.T) {
 		t.Fatalf("first launch: %d %s", rec.Code, rec.Body.String())
 	}
 	rec := request(t, a, "POST", "/api/runs", `{"model":"test.gguf","port":18460,"name":"other","context":2048}`)
-	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "port is already used") {
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "port is already in use") {
 		t.Errorf("port conflict: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = request(t, a, "POST", "/api/runs", `{"model":"test.gguf","port":18461,"name":"test","context":2048}`)
-	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "name is already used") {
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "name is already in use") {
 		t.Errorf("name conflict: %d %s", rec.Code, rec.Body.String())
 	}
 

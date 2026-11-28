@@ -3,13 +3,13 @@
 **The waystation for your models.** OpenTambo is a lightweight llama.cpp
 process manager and persistent KV-cache proxy with a web control panel.
 Configure, launch and supervise your own native
-[`llama-server`](https://github.com/ggml-org/llama.cpp) processes; preserve
+[`llama-server`](https://github.com/ggml-org/llama.cpp) processes. Preserve
 and restore computed inference state across conversation switches and process
-restarts for supported model/build combinations; and operate the model
-inventory, Hugging Face downloads, server lifecycle and cache management from
-the browser. OpenAI-compatible `/v1` routing keeps client URLs stable. One Go
-binary with the UI embedded and embedded SQLite for durable state — no
-external database service, npm, Docker, or bundled inference runtime.
+restarts for supported model and build combinations. Browse your model
+inventory, download from Hugging Face, manage server lifecycles and cache
+settings — all from the browser. OpenAI-compatible `/v1` routing keeps client
+URLs stable. One Go binary with the UI embedded and embedded SQLite for durable
+state — no external database service, npm, Docker, or bundled inference runtime.
 
 ## Install (Linux and macOS)
 
@@ -20,10 +20,10 @@ curl -fsSL https://raw.githubusercontent.com/ekelhala/opentambo/main/scripts/ins
 ```
 
 This grabs the latest [release](https://github.com/ekelhala/opentambo/releases),
-verifies its SHA-256 checksum, and installs the binary to
+verifies its SHA-256 checksum, and puts the binary at
 `~/.local/bin/opentambo`. Set `OPENTAMBO_INSTALL_DIR` or `OPENTAMBO_VERSION`
-to override. Building from source instead: see
-[docs/development.md](docs/development.md).
+to change the install location or version. Building from source instead?
+See [docs/development.md](docs/development.md).
 
 System service install (Linux with systemd) — one automated command:
 
@@ -54,14 +54,14 @@ sudo, and only one instance per data directory.
 The same settings can live in a versioned YAML operator configuration —
 `--config`, `OPENTAMBO_CONFIG`, or `/etc/opentambo/config.yaml` when it
 exists — which also carries prompt-cache defaults and declarative launch
-profiles; explicit flags win over the file. Validate any edit with
+profiles. Explicit flags always override the file. Validate any edit with
 `opentambo config check`. [Deployment](docs/deployment.md) documents the
 full schema, precedence and profile inheritance.
 
 > **No authentication, by design.** The panel can delete models and execute
 > your configured runtime with custom arguments and environment variables.
-> Keep the listener on loopback and put it behind your own access policy
-> (e.g. Pangolin/Newt).
+> Keep the listener on loopback and put it behind your own reverse proxy or
+> access management solution. OpenTambo does not handle access control.
 
 ## Documentation
 

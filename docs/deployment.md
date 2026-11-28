@@ -1,8 +1,8 @@
 # Deployment
 
 OpenTambo — a lightweight llama.cpp process manager and persistent KV-cache
-proxy with a web control panel — can run as the user who owns the models,
-without sudo, or as a system service with its own unprivileged account.
+proxy with a web control panel — can run as the user who owns the models
+(no sudo needed) or as a system service with its own unprivileged account.
 
 ## System install (Linux with systemd)
 
@@ -13,8 +13,8 @@ sudo opentambo install
 ```
 
 The installer provisions everything itself and is idempotent — re-running it
-upgrades the binary and unit while preserving the service account,
-configuration, models and database state:
+upgrades the binary and unit while keeping the service account,
+configuration, models and database state intact:
 
 | Resource                    | Location                                                                          |
 | --------------------------- | --------------------------------------------------------------------------------- |
@@ -27,14 +27,14 @@ configuration, models and database state:
 | Logs                        | journald (`journalctl -u opentambo`)                                              |
 
 Nothing is inferred from the invoking user's `HOME`, so the result is the
-same for any operator and any sudo configuration. Before changing the host
+same for any operator and any sudo configuration. Before touching the host
 the installer refuses non-Linux systems, hosts without a running systemd,
 missing native runtimes and conflicting pre-existing accounts — including a
 pre-existing `opentambo` user with an interactive shell, which is never
 silently repurposed. Override paths with `--llama-server`, `--models`,
 `--data`, `--listen`, `--user`, `--group`, `--extra-groups render,video`
-(GPU access) and `--mount /srv/models` (refuse to start when a model mount
-is absent). To adopt state from an earlier per-user install:
+(GPU access) and `--mount /srv/models` (refuses to start when a model mount
+is missing). To adopt state from an earlier per-user install:
 
 ```sh
 sudo opentambo install --import-state ~/.local/share/opentambo
@@ -42,8 +42,8 @@ sudo opentambo install --import-state ~/.local/share/opentambo
 
 The import copies the SQLite database and cache metadata only (never model
 weights), leaves the old installation intact for rollback, and refuses to
-overwrite a live destination database — stop the old manager before starting
-the service so two managers never run against one history.
+overwrite a live destination database. Stop the old manager before starting
+the service so two managers never run against the same history.
 
 The generated unit runs the manager (and its `llama-server` children) as
 the service account with `ProtectSystem=full`, `ProtectHome=true`,
@@ -108,12 +108,12 @@ profiles:
       ttl: '336h'
 ```
 
-The parser is strict: unknown fields, duplicate keys, explicit nulls and
+The parser is strict — unknown fields, duplicate keys, explicit nulls and
 mistyped values are rejected with the exact field path. Sizes need explicit
 binary units (`B`, `KiB`, `MiB`, `GiB`, `TiB`); durations use Go syntax
 (`30m`, `168h`). Profiles inherit `launch_defaults` (arguments replace,
-environment merges) and the host cache defaults per field; `autostart:
-true` launches the profile when the manager starts — a failing profile is
+environment merges) and the host cache defaults per field. `autostart:
+true` launches the profile when the manager starts. A failing profile is
 logged and never blocks the manager or its siblings.
 
 Validate any edit with no side effects before restarting the service:
@@ -172,6 +172,6 @@ before launching another on that port.
 ## Networking
 
 The listener defaults to `127.0.0.1:8090` and should stay on loopback.
-opentambo has **no authentication**; exposure is delegated to your access
-policy (e.g. Pangolin with Newt on the same host). LiteLLM stacks that use
+opentambo has **no authentication**; exposure is delegated to your reverse
+proxy or access management solution. LiteLLM stacks that use
 Linux host networking can reach the loopback listener directly.

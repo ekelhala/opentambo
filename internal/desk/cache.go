@@ -169,7 +169,7 @@ func (rc *RunCache) acquire(ctx context.Context) error {
 		rc.mu.Lock()
 		rc.stats.QueueTimeouts++
 		rc.mu.Unlock()
-		return errors.New("timed out waiting for the model slot")
+		return errors.New("timed out waiting for the model — it might be busy")
 	}
 }
 
